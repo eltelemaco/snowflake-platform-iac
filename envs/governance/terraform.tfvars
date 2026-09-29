@@ -11,8 +11,8 @@ account_monitor = "ACCOUNT_MONITOR"
 
 # Apply order: env stacks first (they create the warehouses), then this stack.
 warehouse_monitors = {
-  DEV_LOAD_WH  = "DEV_MONITOR"
-  DEV_BI_WH    = "DEV_MONITOR"
+  DEV_LOAD_WH = "DEV_MONITOR"
+  DEV_BI_WH   = "DEV_MONITOR"
   # QA_LOAD_WH   = "QA_MONITOR"  # enable after the env stack is applied
   # QA_BI_WH     = "QA_MONITOR"  # enable after the env stack is applied
   # PROD_LOAD_WH = "PROD_MONITOR"  # enable after the env stack is applied
