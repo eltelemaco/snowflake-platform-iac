@@ -27,3 +27,17 @@ variable "demo_users" {
   type    = map(string)
   default = {}
 }
+
+variable "s3_integration" {
+  type = object({
+    enabled = optional(bool, false)
+    bucket  = optional(string, "")
+  })
+  default = {}
+}
+
+variable "aws_account_id" {
+  type      = string
+  default   = null
+  sensitive = true
+}

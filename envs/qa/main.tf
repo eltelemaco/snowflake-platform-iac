@@ -27,4 +27,12 @@ module "platform" {
   functional_roles           = var.functional_roles
   network_policy_allowed_ips = var.network_policy_allowed_ips
   demo_users                 = var.demo_users
+  s3_integration             = var.s3_integration
+  aws_account_id             = var.aws_account_id
+}
+
+output "s3_trust" {
+  description = "Values for bootstrap/aws phase two: terraform output -json s3_trust"
+  sensitive   = true
+  value       = module.platform.s3_trust
 }

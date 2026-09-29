@@ -13,3 +13,9 @@ output "access_roles" {
 output "functional_roles" {
   value = module.rbac.functional_roles
 }
+
+# Handoff values for bootstrap/aws phase two. Sensitive, so never printed in CI.
+output "s3_trust" {
+  sensitive = true
+  value     = var.s3_integration.enabled ? module.s3_integration[0].trust : null
+}

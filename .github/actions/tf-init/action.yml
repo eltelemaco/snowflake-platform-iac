@@ -18,6 +18,9 @@ inputs:
     required: true
   snowflake_account_name:
     required: true
+  aws_account_id:
+    description: AWS account ID, exposed to Terraform as a sensitive TF_VAR
+    required: true
 
 runs:
   using: composite
@@ -51,6 +54,7 @@ runs:
           echo "SNOWFLAKE_ORGANIZATION_NAME=${{ inputs.snowflake_organization_name }}"
           echo "SNOWFLAKE_ACCOUNT_NAME=${{ inputs.snowflake_account_name }}"
           echo "SNOWFLAKE_USER=${{ inputs.snowflake_user }}"
+          echo "TF_VAR_aws_account_id=${{ inputs.aws_account_id }}"
         } >> "$GITHUB_ENV"
 
     - name: terraform init

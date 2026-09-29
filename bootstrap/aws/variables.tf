@@ -19,3 +19,19 @@ variable "environments" {
   type    = set(string)
   default = ["dev", "qa", "prod"]
 }
+
+variable "snowflake_storage_iam" {
+  description = <<-EOT
+    Per-environment trust for the Snowflake storage integration roles, from
+    `terraform output` of each envs/<env> root once its integration exists:
+    { dev = { iam_user_arn = "...", external_id = "..." }, ... }
+    While an environment has no entry, its role trusts this AWS account's root,
+    a deliberate two-phase handshake because Snowflake only reveals these values
+    after the integration is created. Supply it via TF_VAR, never commit it.
+  EOT
+  type = map(object({
+    iam_user_arn = string
+    external_id  = string
+  }))
+  default = {}
+}
