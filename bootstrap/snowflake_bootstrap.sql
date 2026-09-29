@@ -38,7 +38,7 @@ CREATE USER IF NOT EXISTS SVC_TF_DEV
   WORKLOAD_IDENTITY = (
     TYPE = OIDC
     ISSUER = 'https://token.actions.githubusercontent.com'
-    SUBJECT = 'repo:eltelemaco/snowflake-platform-iac:environment:dev'
+    SUBJECT = 'repo:eltelemaco@6528831/snowflake-platform-iac@1396665286:environment:dev'
     OIDC_AUDIENCE_LIST = ('snowflakecomputing.com')
   );
 
@@ -48,7 +48,7 @@ CREATE USER IF NOT EXISTS SVC_TF_QA
   WORKLOAD_IDENTITY = (
     TYPE = OIDC
     ISSUER = 'https://token.actions.githubusercontent.com'
-    SUBJECT = 'repo:eltelemaco/snowflake-platform-iac:environment:qa'
+    SUBJECT = 'repo:eltelemaco@6528831/snowflake-platform-iac@1396665286:environment:qa'
     OIDC_AUDIENCE_LIST = ('snowflakecomputing.com')
   );
 
@@ -58,7 +58,7 @@ CREATE USER IF NOT EXISTS SVC_TF_PROD
   WORKLOAD_IDENTITY = (
     TYPE = OIDC
     ISSUER = 'https://token.actions.githubusercontent.com'
-    SUBJECT = 'repo:eltelemaco/snowflake-platform-iac:environment:prod'
+    SUBJECT = 'repo:eltelemaco@6528831/snowflake-platform-iac@1396665286:environment:prod'
     OIDC_AUDIENCE_LIST = ('snowflakecomputing.com')
   );
 
@@ -73,7 +73,7 @@ CREATE USER IF NOT EXISTS SVC_TF_PLAN_PR
   WORKLOAD_IDENTITY = (
     TYPE = OIDC
     ISSUER = 'https://token.actions.githubusercontent.com'
-    SUBJECT = 'repo:eltelemaco/snowflake-platform-iac:pull_request'
+    SUBJECT = 'repo:eltelemaco@6528831/snowflake-platform-iac@1396665286:pull_request'
     OIDC_AUDIENCE_LIST = ('snowflakecomputing.com')
   );
 
@@ -83,7 +83,7 @@ CREATE USER IF NOT EXISTS SVC_TF_PLAN_MAIN
   WORKLOAD_IDENTITY = (
     TYPE = OIDC
     ISSUER = 'https://token.actions.githubusercontent.com'
-    SUBJECT = 'repo:eltelemaco/snowflake-platform-iac:ref:refs/heads/main'
+    SUBJECT = 'repo:eltelemaco@6528831/snowflake-platform-iac@1396665286:ref:refs/heads/main'
     OIDC_AUDIENCE_LIST = ('snowflakecomputing.com')
   );
 
@@ -92,6 +92,42 @@ GRANT ROLE TF_DEPLOYER TO USER SVC_TF_PLAN_MAIN;
 GRANT ROLE TF_DEPLOYER TO USER SVC_TF_DEV;
 GRANT ROLE TF_DEPLOYER TO USER SVC_TF_QA;
 GRANT ROLE TF_DEPLOYER TO USER SVC_TF_PROD;
+
+
+-- 2b. GitHub issues an IMMUTABLE subject claim to repos created after the change:
+--     repo:<owner>@<owner-id>/<repo>@<repo-id>:<context>. It survives renames and
+--     cannot be inherited by a recreated repo of the same name. CREATE ... IF NOT
+--     EXISTS leaves existing users untouched, so re-assert the subjects here.
+ALTER USER SVC_TF_DEV SET WORKLOAD_IDENTITY = (
+  TYPE = OIDC
+  ISSUER = 'https://token.actions.githubusercontent.com'
+  SUBJECT = 'repo:eltelemaco@6528831/snowflake-platform-iac@1396665286:environment:dev'
+  OIDC_AUDIENCE_LIST = ('snowflakecomputing.com')
+);
+ALTER USER SVC_TF_QA SET WORKLOAD_IDENTITY = (
+  TYPE = OIDC
+  ISSUER = 'https://token.actions.githubusercontent.com'
+  SUBJECT = 'repo:eltelemaco@6528831/snowflake-platform-iac@1396665286:environment:qa'
+  OIDC_AUDIENCE_LIST = ('snowflakecomputing.com')
+);
+ALTER USER SVC_TF_PROD SET WORKLOAD_IDENTITY = (
+  TYPE = OIDC
+  ISSUER = 'https://token.actions.githubusercontent.com'
+  SUBJECT = 'repo:eltelemaco@6528831/snowflake-platform-iac@1396665286:environment:prod'
+  OIDC_AUDIENCE_LIST = ('snowflakecomputing.com')
+);
+ALTER USER SVC_TF_PLAN_PR SET WORKLOAD_IDENTITY = (
+  TYPE = OIDC
+  ISSUER = 'https://token.actions.githubusercontent.com'
+  SUBJECT = 'repo:eltelemaco@6528831/snowflake-platform-iac@1396665286:pull_request'
+  OIDC_AUDIENCE_LIST = ('snowflakecomputing.com')
+);
+ALTER USER SVC_TF_PLAN_MAIN SET WORKLOAD_IDENTITY = (
+  TYPE = OIDC
+  ISSUER = 'https://token.actions.githubusercontent.com'
+  SUBJECT = 'repo:eltelemaco@6528831/snowflake-platform-iac@1396665286:ref:refs/heads/main'
+  OIDC_AUDIENCE_LIST = ('snowflakecomputing.com')
+);
 
 -- 3. Key-pair user for local runs from a laptop and as the WIF fallback.
 --    The matching private key lives in ~/.snowflake/tf_local_key.p8 (never in git).

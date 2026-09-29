@@ -15,8 +15,8 @@ locals {
   bucket_arn = "arn:aws:s3:::${local.bucket}"
 
   plan_subjects = [
-    "repo:${var.github_repo}:pull_request",
-    "repo:${var.github_repo}:ref:refs/heads/main",
+    "${var.github_sub_prefix}:pull_request",
+    "${var.github_sub_prefix}:ref:refs/heads/main",
   ]
 }
 
@@ -97,7 +97,7 @@ data "aws_iam_policy_document" "apply_trust" {
     condition {
       test     = "StringEquals"
       variable = "${local.oidc_host}:sub"
-      values   = ["repo:${var.github_repo}:environment:${each.key}"]
+      values   = ["${var.github_sub_prefix}:environment:${each.key}"]
     }
   }
 }

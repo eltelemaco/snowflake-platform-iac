@@ -3,6 +3,12 @@ variable "expected_account_id" {
   type        = string
 }
 
+variable "github_sub_prefix" {
+  description = "Prefix of the GitHub OIDC `sub` claim. This repo uses the immutable form (owner and repo IDs), see `gh api repos/<repo>/actions/oidc/customization/sub`."
+  type        = string
+  default     = "repo:eltelemaco@6528831/snowflake-platform-iac@1396665286"
+}
+
 variable "github_repo" {
   description = "owner/name of the repo whose workflows may assume the roles."
   type        = string
