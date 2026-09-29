@@ -22,6 +22,8 @@ locals {
 
 # --- state bucket ---------------------------------------------------------------
 
+# trivy:ignore:AWS-0132 -- SSE-S3 (AES256) is accepted for this non-prod state bucket.
+# Production would use a customer-managed KMS key plus kms:* on the plan/apply roles.
 resource "aws_s3_bucket" "state" {
   bucket = local.bucket
 }
