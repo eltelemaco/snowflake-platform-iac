@@ -1,0 +1,46 @@
+name: terraform-apply (reusable)
+
+# The job binds to a GitHub environment, which is where required reviewers
+# (prod) and the environment-scoped OIDC subject come from. It applies the
+# exact plan file produced earlier, never a fresh plan.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      snowflake_user:
+        type: string
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: apply-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: plan-${{ inputs.environment }}
+          path: envs/${{ inputs.environment }}
+
+      - uses: ./.github/actions/tf-init
+        with:
+          environment: ${{ inputs.environment }}
+          snowflake_user: ${{ inputs.snowflake_user }}
+          aws_role_arn: ${{ secrets.AWS_APPLY_ROLE_ARN }}
+          state_bucket: ${{ secrets.TF_STATE_BUCKET }}
+          snowflake_organization_name: ${{ secrets.SNOWFLAKE_ORGANIZATION_NAME }}
+          snowflake_account_name: ${{ secrets.SNOWFLAKE_ACCOUNT_NAME }}
+
+      - name: terraform apply (saved plan)
+        working-directory: envs/${{ inputs.environment }}
+        run: terraform apply -input=false -no-color tfplan

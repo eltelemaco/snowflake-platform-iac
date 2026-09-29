@@ -1,0 +1,63 @@
+name: drift-detection
+
+# Nightly `terraform plan` against every environment. Any diff means someone
+# changed Snowflake outside the pipeline (or code merged without applying).
+# It reports; it never auto-remediates. Fixing prod needs a human decision.
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+jobs:
+  plan-dev:
+    uses: ./.github/workflows/terraform-plan.yml
+    secrets: inherit
+    with: { environment: dev, snowflake_user: SVC_TF_PLAN_MAIN }
+  plan-qa:
+    uses: ./.github/workflows/terraform-plan.yml
+    secrets: inherit
+    with: { environment: qa, snowflake_user: SVC_TF_PLAN_MAIN }
+  plan-prod:
+    uses: ./.github/workflows/terraform-plan.yml
+    secrets: inherit
+    with: { environment: prod, snowflake_user: SVC_TF_PLAN_MAIN }
+
+  report:
+    needs: [plan-dev, plan-qa, plan-prod]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: plan-*
+          path: plans
+
+      - name: Open or update a drift issue per environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODE_DEV: ${{ needs.plan-dev.outputs.exitcode }}
+          CODE_QA: ${{ needs.plan-qa.outputs.exitcode }}
+          CODE_PROD: ${{ needs.plan-prod.outputs.exitcode }}
+        run: |
+          gh label create drift --color B60205 --description "Snowflake differs from code" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          drift=0
+          for env in dev qa prod; do
+            var="CODE_$(echo $env | tr a-z A-Z)"; code="${!var}"
+            title="Drift detected: $env"
+            existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label drift --state open --search "\"$title\" in:title" --json number --jq '.[0].number')
+            if [ "$code" = "2" ]; then
+              drift=1
+              { echo "Nightly plan for **$env** is not empty. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+                echo; echo '```'; tail -c 50000 "plans/plan-$env/plan.txt"; echo '```'; } > body.md
+              if [ -n "$existing" ]; then gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file body.md
+              else gh issue create --repo "$GITHUB_REPOSITORY" --label drift --title "$title" --body-file body.md; fi
+            elif [ "$code" = "0" ] && [ -n "$existing" ]; then
+              gh issue close "$existing" --repo "$GITHUB_REPOSITORY" --comment "Drift resolved: nightly plan is clean."
+            fi
+          done
+          exit $drift

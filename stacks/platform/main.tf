@@ -1,0 +1,69 @@
+locals {
+  env    = upper(var.environment)
+  prefix = "${local.env}_"
+
+  database_names  = { for k, v in var.databases : k => "${local.prefix}${k}" }
+  warehouse_names = { for k, v in var.warehouses : k => "${local.prefix}${k}" }
+
+  tags = "Managed by Terraform (${var.environment})"
+}
+
+module "database" {
+  source   = "../../modules/database"
+  for_each = var.databases
+
+  name                        = local.database_names[each.key]
+  data_retention_time_in_days = each.value.data_retention_days
+  comment                     = coalesce(each.value.comment, local.tags)
+}
+
+module "warehouse" {
+  source   = "../../modules/warehouse"
+  for_each = var.warehouses
+
+  name                         = local.warehouse_names[each.key]
+  size                         = each.value.size
+  auto_suspend_seconds         = each.value.auto_suspend_seconds
+  statement_timeout_in_seconds = each.value.statement_timeout_sec
+  comment                      = coalesce(each.value.comment, local.tags)
+}
+
+module "rbac" {
+  source = "../../modules/rbac"
+
+  # Passing module outputs (not the locals) makes grants wait for the objects.
+  databases  = toset([for m in module.database : m.name])
+  warehouses = toset([for m in module.warehouse : m.name])
+
+  functional_roles = {
+    for role, members in var.functional_roles :
+    "${local.prefix}${role}" => toset([for m in members : "${local.prefix}${m}"])
+  }
+}
+
+module "network_policy" {
+  source = "../../modules/network_policy"
+  count  = length(var.network_policy_allowed_ips) > 0 ? 1 : 0
+
+  name            = "${local.prefix}HUMAN_USERS"
+  allowed_ip_list = var.network_policy_allowed_ips
+  comment         = "${local.tags}. Human users only: CI service users are exempt by design."
+}
+
+resource "snowflake_user" "demo" {
+  for_each = length(var.network_policy_allowed_ips) > 0 ? var.demo_users : {}
+
+  name           = "${local.prefix}${each.value}"
+  comment        = "Demo human user. ${local.tags}"
+  network_policy = module.network_policy[0].name
+  disabled       = true # demo object: exists to show policy attachment, cannot log in
+}
+
+resource "snowflake_grant_account_role" "demo_user_role" {
+  for_each = snowflake_user.demo
+
+  role_name = "${local.prefix}${each.key}"
+  user_name = each.value.name
+
+  depends_on = [module.rbac]
+}

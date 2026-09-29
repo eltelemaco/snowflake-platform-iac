@@ -1,0 +1,56 @@
+name: pr
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ["envs/**", "stacks/**", "modules/**", ".github/**", ".terraform-version"]
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    uses: ./.github/workflows/terraform-validate.yml
+
+  plan:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, qa, prod]
+    uses: ./.github/workflows/terraform-plan.yml
+    secrets: inherit
+    with:
+      environment: ${{ matrix.environment }}
+      snowflake_user: SVC_TF_PLAN_PR
+
+  comment:
+    needs: plan
+    if: ${{ !cancelled() && needs.plan.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: plan-*
+          path: plans
+
+      - name: Post plan summary on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "## Terraform plan (all environments)"
+            for env in dev qa prod; do
+              f="plans/plan-$env/plan.txt"
+              echo "<details><summary><b>$env</b>: $(grep -E '^(Plan:|No changes)' "$f" | head -1)</summary>"
+              echo; echo '```'; tail -c 12000 "$f"; echo '```'; echo "</details>"
+            done
+          } > comment.md
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none --body-file comment.md

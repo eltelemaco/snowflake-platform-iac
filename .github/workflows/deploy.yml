@@ -1,0 +1,59 @@
+name: deploy
+
+# Merge to main: plan every environment, then apply dev -> qa -> prod.
+# Each apply job binds to a GitHub environment. `prod` has a required reviewer,
+# so the pipeline pauses there until a human approves the plan they can read.
+on:
+  push:
+    branches: [main]
+    paths: ["envs/**", "stacks/**", "modules/**", ".github/**", ".terraform-version"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    uses: ./.github/workflows/terraform-validate.yml
+
+  plan-dev:
+    needs: validate
+    uses: ./.github/workflows/terraform-plan.yml
+    secrets: inherit
+    with: { environment: dev, snowflake_user: SVC_TF_PLAN_MAIN }
+  plan-qa:
+    needs: validate
+    uses: ./.github/workflows/terraform-plan.yml
+    secrets: inherit
+    with: { environment: qa, snowflake_user: SVC_TF_PLAN_MAIN }
+  plan-prod:
+    needs: validate
+    uses: ./.github/workflows/terraform-plan.yml
+    secrets: inherit
+    with: { environment: prod, snowflake_user: SVC_TF_PLAN_MAIN }
+
+  apply-dev:
+    needs: plan-dev
+    if: needs.plan-dev.outputs.exitcode == '2'
+    uses: ./.github/workflows/terraform-apply.yml
+    secrets: inherit
+    with: { environment: dev, snowflake_user: SVC_TF_DEV }
+
+  apply-qa:
+    needs: [plan-qa, apply-dev]
+    if: ${{ !failure() && !cancelled() && needs.plan-qa.outputs.exitcode == '2' }}
+    uses: ./.github/workflows/terraform-apply.yml
+    secrets: inherit
+    with: { environment: qa, snowflake_user: SVC_TF_QA }
+
+  apply-prod:
+    needs: [plan-prod, apply-qa]
+    if: ${{ !failure() && !cancelled() && needs.plan-prod.outputs.exitcode == '2' }}
+    uses: ./.github/workflows/terraform-apply.yml
+    secrets: inherit
+    with: { environment: prod, snowflake_user: SVC_TF_PROD }

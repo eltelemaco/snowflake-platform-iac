@@ -1,0 +1,60 @@
+name: terraform-plan (reusable)
+
+# Runs WITHOUT a GitHub environment on purpose: environment protection rules
+# (the prod approval) must gate apply only, never plan. Identity is therefore
+# distinguished by OIDC subject (pull_request vs main), see bootstrap SQL.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      snowflake_user:
+        type: string
+        required: true
+    outputs:
+      exitcode:
+        description: "0 = no changes, 2 = changes/drift"
+        value: ${{ jobs.plan.outputs.exitcode }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      exitcode: ${{ steps.plan.outputs.exitcode }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/tf-init
+        with:
+          environment: ${{ inputs.environment }}
+          snowflake_user: ${{ inputs.snowflake_user }}
+          aws_role_arn: ${{ secrets.AWS_PLAN_ROLE_ARN }}
+          state_bucket: ${{ secrets.TF_STATE_BUCKET }}
+          snowflake_organization_name: ${{ secrets.SNOWFLAKE_ORGANIZATION_NAME }}
+          snowflake_account_name: ${{ secrets.SNOWFLAKE_ACCOUNT_NAME }}
+
+      - name: terraform plan
+        id: plan
+        working-directory: envs/${{ inputs.environment }}
+        run: |
+          set +e
+          # -lock=false: the plan role is read-only on S3 and a plan never writes state.
+          terraform plan -input=false -no-color -lock=false -detailed-exitcode -out=tfplan 2>&1 | tee plan.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+          { echo '### Plan: `${{ inputs.environment }}`'; echo '```'; tail -c 60000 plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          [ "$code" -ne 1 ]
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: plan-${{ inputs.environment }}
+          path: |
+            envs/${{ inputs.environment }}/tfplan
+            envs/${{ inputs.environment }}/plan.txt
+          retention-days: 3

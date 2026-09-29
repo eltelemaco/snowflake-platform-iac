@@ -1,0 +1,62 @@
+name: tf-init
+description: Authenticate to AWS and Snowflake with GitHub OIDC (no stored secrets) and run terraform init for one environment.
+
+inputs:
+  environment:
+    description: dev | qa | prod
+    required: true
+  snowflake_user:
+    description: Snowflake service user bound to this job's OIDC subject
+    required: true
+  aws_role_arn:
+    description: IAM role to assume through GitHub OIDC
+    required: true
+  state_bucket:
+    description: S3 bucket holding Terraform state
+    required: true
+  snowflake_organization_name:
+    required: true
+  snowflake_account_name:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Assume AWS role (OIDC)
+      uses: aws-actions/configure-aws-credentials@v6
+      with:
+        role-to-assume: ${{ inputs.aws_role_arn }}
+        aws-region: us-east-1
+
+    - name: Read Terraform version pin
+      id: tfv
+      shell: bash
+      run: echo "version=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
+
+    - uses: hashicorp/setup-terraform@v4
+      with:
+        terraform_version: ${{ steps.tfv.outputs.version }}
+        terraform_wrapper: false
+
+    - name: Get GitHub OIDC token for Snowflake
+      shell: bash
+      run: |
+        token=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=snowflakecomputing.com" | jq -r .value)
+        echo "::add-mask::$token"
+        {
+          echo "SNOWFLAKE_TOKEN=$token"
+          echo "SNOWFLAKE_AUTHENTICATOR=WORKLOAD_IDENTITY"
+          echo "SNOWFLAKE_WORKLOAD_IDENTITY_PROVIDER=OIDC"
+          echo "SNOWFLAKE_ORGANIZATION_NAME=${{ inputs.snowflake_organization_name }}"
+          echo "SNOWFLAKE_ACCOUNT_NAME=${{ inputs.snowflake_account_name }}"
+          echo "SNOWFLAKE_USER=${{ inputs.snowflake_user }}"
+        } >> "$GITHUB_ENV"
+
+    - name: terraform init
+      shell: bash
+      working-directory: envs/${{ inputs.environment }}
+      run: |
+        terraform init -input=false \
+          -backend-config=backend.hcl \
+          -backend-config="bucket=${{ inputs.state_bucket }}"
