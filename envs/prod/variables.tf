@@ -38,6 +38,6 @@ variable "s3_integration" {
 
 variable "aws_account_id" {
   type      = string
-  default   = null
+  default   = ""
   sensitive = true
 }

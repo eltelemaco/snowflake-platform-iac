@@ -55,11 +55,11 @@ variable "s3_integration" {
 variable "aws_account_id" {
   description = "AWS account that owns the landing bucket roles. Sensitive so it stays out of plans and PR comments (this repo is public)."
   type        = string
-  default     = null
+  default     = ""
   sensitive   = true
 
   validation {
-    condition     = !var.s3_integration.enabled || (var.aws_account_id != null && var.s3_integration.bucket != "")
+    condition     = !var.s3_integration.enabled || (var.aws_account_id != "" && var.s3_integration.bucket != "")
     error_message = "s3_integration.enabled requires aws_account_id and s3_integration.bucket."
   }
 }
