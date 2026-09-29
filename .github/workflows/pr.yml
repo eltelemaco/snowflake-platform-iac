@@ -3,7 +3,6 @@ name: pr
 on:
   pull_request:
     branches: [main]
-    paths: ["envs/**", "stacks/**", "modules/**", ".github/**", ".terraform-version"]
 
 permissions:
   id-token: write
