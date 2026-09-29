@@ -33,8 +33,9 @@ resource "aws_s3_bucket_versioning" "state" {
   }
 }
 
-# trivy:ignore:AWS-0132 -- SSE-S3 (AES256) is accepted for this non-prod state bucket.
-# Production would use a customer-managed KMS key plus kms:* on the plan/apply roles.
+# Accepted exception (AWS-0132): SSE-S3 (AES256) is enough for this non-prod state
+# bucket. Production would use a customer-managed KMS key plus kms:* on the roles.
+#trivy:ignore:AWS-0132
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   bucket = aws_s3_bucket.state.id
   rule {
