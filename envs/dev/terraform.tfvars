@@ -2,6 +2,7 @@
 databases = {
   RAW       = { data_retention_days = 1 }
   ANALYTICS = { data_retention_days = 1 }
+  SANDBOX   = { data_retention_days = 1, comment = "Scratch space for engineers. Dev only." }
 }
 
 warehouses = {
