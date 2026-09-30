@@ -12,6 +12,11 @@ on:
       snowflake_user:
         type: string
         required: true
+      ref:
+        description: "Commit to check out. Empty = the commit that triggered the caller."
+        type: string
+        required: false
+        default: ""
     outputs:
       exitcode:
         description: "0 = no changes, 2 = changes/drift"
@@ -28,6 +33,8 @@ jobs:
       exitcode: ${{ steps.plan.outputs.exitcode }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/tf-init
         with:

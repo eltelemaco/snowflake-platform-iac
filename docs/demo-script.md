@@ -66,6 +66,16 @@ the `prod` environment settings (required reviewer, deploys only from `main`) an
 
 Fallback if live steps fail: drift run https://github.com/eltelemaco/snowflake-platform-iac/issues/2
 
+## Optional, 30 seconds . Promotion without branches
+
+> "There is no branch per environment: the same commit runs everywhere and only tfvars differ. When I
+> need something the automatic path can't do, like pinning qa or a prod hotfix, I promote one commit
+> to one environment by hand."
+
+`gh workflow run promote.yml -f environment=qa -f ref=<older sha>` runs plan-only by default. Show the
+summary (commit, mode) and the plan. Then point out the two guardrails: the commit must be on `main`,
+and nothing applies unless `apply` is ticked. Prod still pauses for approval.
+
 ## Optional, 45 seconds . AWS and Snowflake together
 
 In Snowsight: `LIST @DEV_RAW.LANDING.S3_LANDING;` shows `dev/samples/hello.csv`. Then, to show
