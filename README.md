@@ -97,6 +97,12 @@ approval. Apply is the only thing that needs a human.
 a recreated repo of the same name. My first trust policies used the old name-only form and AWS
 rejected the token. Check yours with `gh api repos/<repo>/actions/oidc/customization/sub`.
 
+**Tables are a preview resource.** `snowflake_table` is marked preview in provider 2.x and must be enabled
+with `preview_features_enabled`. The version is pinned, so behavior cannot change under it, but in a
+real platform table DDL usually belongs to a migration tool (schemachange, dbt) and Terraform owns
+everything up to the schema. Plans succeed without the flag and only an apply fails, so this can only
+be caught by a real apply.
+
 **New objects are a config change.** Schemas and tables are declared in an environment's
 `terraform.tfvars` (`schemas`, `tables`). Database-level future grants mean a new schema or table is
 usable by the right roles the moment it exists, with no per-object grants to write.

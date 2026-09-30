@@ -16,6 +16,10 @@ terraform {
 # variables: OIDC token in CI, key-pair on a laptop. Same code either way.
 provider "snowflake" {
   role = "TF_DEPLOYER"
+
+  # snowflake_table is a preview resource in provider 2.x: plans work without this,
+  # but apply fails ("snowflake_table_resource is currently a preview feature").
+  preview_features_enabled = ["snowflake_table_resource"]
 }
 
 module "platform" {
