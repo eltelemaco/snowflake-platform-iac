@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       exitcode: ${{ steps.plan.outputs.exitcode }}
     steps:

@@ -32,7 +32,7 @@ jobs:
   comment:
     needs: plan
     if: ${{ !cancelled() && needs.plan.result != 'skipped' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v8
         with:
