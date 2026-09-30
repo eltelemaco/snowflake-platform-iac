@@ -187,6 +187,11 @@ account ID and role ARN are `sensitive` Terraform values so they do not appear i
 8. **The S3 trust handoff is manual.** After a new environment's integration exists, its IAM user and
    external ID are fed to `bootstrap/aws` (`snowflake_storage_iam`). It is a one-time step per
    environment. The landing roles are read-only, so unloading data to S3 is not covered.
+9. **The bootstrap has no pipeline, by design.** It needs `ACCOUNTADMIN` and creates the identities the pipeline
+   itself uses, so a human runs it. Local helper scripts (git-ignored, not in this repo) wrap it with a dry run
+   that diffs the SQL against the live account, refuses to overwrite existing OIDC settings without an explicit
+   flag, and snapshots the live configuration before a change. Snowflake has no dry run for DDL, so that dry run
+   is static checks plus a read-only comparison; it cannot catch a statement that fails at execution time.
 
 ## Repository layout
 
@@ -207,7 +212,10 @@ docs/               demo-script.md (10-minute walkthrough), planner-role-finding
 ## Reproduce it
 
 1. **Snowflake:** run `bootstrap/snowflake_bootstrap.sql` once as `ACCOUNTADMIN`. Adjust the OIDC
-   subjects to your repo (`gh api repos/<repo>/actions/oidc/customization/sub`).
+   subjects to your repo (`gh api repos/<repo>/actions/oidc/customization/sub`). The file is idempotent, but
+   read it as two different behaviours: `CREATE USER IF NOT EXISTS` silently leaves an existing user with the
+   wrong settings alone, while `ALTER USER ... SET WORKLOAD_IDENTITY` silently overwrites an existing subject.
+   Compare the file with the live account before re-running it on one that already exists.
 2. **AWS:** `cd bootstrap/aws && AWS_PROFILE=<non-prod> TF_VAR_expected_account_id=<id> terraform apply`.
    The `allowed_account_ids` guard aborts if the credentials belong to another account.
 3. **GitHub:** create environments `dev`, `qa`, `prod` (required reviewer on `qa` and `prod`, deploy only from
