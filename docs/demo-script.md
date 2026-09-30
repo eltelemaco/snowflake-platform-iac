@@ -13,7 +13,9 @@ Repo: https://github.com/eltelemaco/snowflake-platform-iac
 2. Confirm the demo branch is current with `main` (branch protection requires it):
    `git fetch && git log --oneline origin/main..origin/demo/sales-orders` should show one commit, and
    `git log --oneline origin/demo/sales-orders..origin/main` should show none. If `main` moved, run
-   `git checkout demo/sales-orders && git rebase origin/main && git push --force-with-lease`.
+   `git checkout demo/sales-orders && git rebase origin/main`, then check `git rev-list --count origin/main..HEAD`
+   still prints `1` before running `git push --force-with-lease`. A `0` means git dropped the commit because
+   the same change is already on `main`; recreate the branch as described under "After the demo".
 3. Confirm `DEV_RAW.SALES` does not exist yet: `SHOW SCHEMAS LIKE 'SALES' IN DATABASE DEV_RAW;`
 
 ## 0:00 to 1:30 . The idea and the layout
@@ -87,6 +89,20 @@ account because a trial cannot have more.
 
 To run it again, remove the change: revert the merge commit through a PR
 (`git revert <sha>` on a branch). The pipeline then destroys the schema and table.
+
+Then rebuild the demo branch. **Do not rebase it**: `main` now contains this change, and `git rebase` silently
+drops any commit whose patch already exists upstream, leaving an empty branch. Re-apply the change by
+reverting the revert instead:
+
+```bash
+git fetch origin && git checkout main && git pull
+REVERT=$(git log --grep="Revert" --format=%h -1)     # the revert commit you just merged
+git checkout -B demo/sales-orders origin/main
+git revert --no-edit $REVERT                          # re-adds the SALES schema and ORDERS table
+git push --force-with-lease origin demo/sales-orders
+```
+
+A closed PR cannot be reopened after that force-push, so create a new one for the next run.
 
 ## Extras if asked (not in the ten minutes)
 
