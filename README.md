@@ -140,9 +140,13 @@ account ID and role ARN are `sensitive` Terraform values so they do not appear i
 
 ## Known limitations (deliberate, and what I would do next)
 
-1. **Plan users share `TF_DEPLOYER`.** A plan must refresh state, so it needs to read what the
-   deployer owns. Next: a read-only `TF_PLANNER` role, so a malicious PR workflow cannot mutate
-   Snowflake. Until then, workflow files should be protected with `CODEOWNERS`.
+1. **Plan users share `TF_DEPLOYER`.** A plan must refresh state, and Snowflake gives a non-owner no
+   way to `DESCRIBE` users, network policies or integrations, so a read-only planner would report
+   false drift for them. I tested this rather than assuming it; see
+   [`docs/planner-role-findings.md`](docs/planner-role-findings.md). The redesign (move those objects
+   into the manual `ACCOUNTADMIN` stack, then add a real `TF_PLANNER`) is documented as the next step.
+   Mitigations today: read-only AWS role for plans, no OIDC token for fork PRs, `CODEOWNERS` on
+   workflows, and branch protection.
 2. **State bucket uses SSE-S3, not a customer-managed KMS key.** Trivy flags this (AWS-0132). It is
    suppressed with a comment in `bootstrap/aws/main.tf`. Production would use a CMK.
 3. **TFLint has no Snowflake ruleset.** It catches generic Terraform issues only. `validate`,

@@ -77,7 +77,8 @@ database-level future grants cover any new object. **No per-object grants were w
 ## 9:30 to 10:00 . Honest limits
 
 Say two of them from the README's **Known limitations** section, for example: the plan identities
-share the deployer role (next step is a read-only planner), and environments are prefixes in one
+share the deployer role (I tested a read-only planner: Snowflake cannot let a non-owner describe users,
+network policies or integrations, so the fix is a redesign, documented in `docs/planner-role-findings.md`), and environments are prefixes in one
 account because a trial cannot have more.
 
 ## After the demo: reset
@@ -105,4 +106,5 @@ To run it again, remove the change: revert the merge commit through a PR
   drift, and promotion turns into a code merge.
 - **What if the state bucket is lost?** It is versioned. Restore the previous object version.
 - **How would this scale to a team?** Code-owner review on workflows, a second reviewer on prod,
-  self-hosted runners with fixed egress, per-environment accounts, and a read-only planner role.
+  self-hosted runners with fixed egress, per-environment accounts, and moving users, network policies
+  and integrations into the privileged stack so a read-only planner works.
