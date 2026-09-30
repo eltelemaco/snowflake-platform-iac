@@ -25,3 +25,8 @@ s3_integration = {
   enabled = true
   bucket  = "snowflake-platform-iac-landing-8e6407430e"
 }
+
+# Demo change: the SALES schema.
+schemas = {
+  SALES = { database = "RAW", comment = "Order data from the storefront" }
+}
