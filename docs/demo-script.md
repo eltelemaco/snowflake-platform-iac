@@ -1,9 +1,8 @@
 # Ten-minute walkthrough
 
 One live change, from pull request to Snowflake, through **all three environments**, with everything that
-protects it visible on the way. The change is prepared on branch `demo/sales-orders`:
-- `dev`: a `SALES` schema and an `ORDERS` table
-- `qa` and `prod`: the same `SALES` schema
+protects it visible on the way. The change is prepared on branch `demo/sales-orders`: the same `SALES`
+schema and `ORDERS` table in `dev`, `qa` and `prod`.
 
 No PR is open. You create it live, which is the first thing the audience sees. Everything here has been run
 for real. Linked runs are the fallback if something misbehaves live.
@@ -35,14 +34,14 @@ environment: the same commit runs everywhere.
 
 ## 1:30 to 4:00 . The change (live)
 
-1. Show the diff on `demo/sales-orders`: three small edits, one per environment. `dev` gets a schema and
-   a table, `qa` and `prod` get the schema. No new Terraform code, only configuration.
+1. Show the diff on `demo/sales-orders`: the same small block in each of the three environments, a schema
+   and a table. No new Terraform code, only configuration.
 2. Open the PR from the prepared branch (GitHub cannot reopen an old PR once its branch was force-pushed):
-   `gh pr create --base main --head demo/sales-orders --title "Add SALES schema to dev, qa and prod" --body "Adds the SALES schema to every environment, plus the ORDERS table in dev."`
+   `gh pr create --base main --head demo/sales-orders --title "Add SALES schema and ORDERS table to dev, qa and prod" --body "Adds the SALES schema and the ORDERS table to every environment."`
 3. While the checks run (about a minute) say what they are: `validate` (fmt, validate, tflint, trivy)
    and a plan for **all three environments**.
-4. Read the plan comment: **dev adds 2 resources, qa adds 1, prod adds 1.** Reviewers see the blast
-   radius per environment before approving.
+4. Read the plan comment: **each environment adds 2 resources, the schema and the table.** Reviewers see the
+   blast radius per environment before approving.
 
 > "Nobody can merge until these four checks pass. The plan a person reads is the plan file that gets
 > applied. If state changed in between, Terraform refuses it."
@@ -66,10 +65,10 @@ environment: the same commit runs everywhere.
 ## 8:00 to 9:15 . Proof in Snowflake
 
 ```sql
-SHOW SCHEMAS LIKE 'SALES' IN DATABASE QA_RAW;     -- exists
-SHOW SCHEMAS LIKE 'SALES' IN DATABASE PROD_RAW;   -- exists
-SHOW TABLES IN SCHEMA DEV_RAW.SALES;
-SHOW GRANTS ON TABLE DEV_RAW.SALES.ORDERS;
+SHOW TABLES IN SCHEMA DEV_RAW.SALES;             -- ORDERS
+SHOW TABLES IN SCHEMA QA_RAW.SALES;              -- ORDERS
+SHOW TABLES IN SCHEMA PROD_RAW.SALES;            -- ORDERS
+SHOW GRANTS ON TABLE PROD_RAW.SALES.ORDERS;
 ```
 
 The last one is the point: `DEV_RAW_RO` and `DEV_RAW_RW` already hold the right privileges, because
@@ -85,7 +84,7 @@ and environments are prefixes in one account because a trial cannot have more.
 ## After the demo: reset
 
 To run it again, remove the change: revert the merge commit through a PR
-(`git revert <sha>` on a branch). The plan shows **dev 2 to destroy, qa 1, prod 1**, and the deploy needs
+(`git revert <sha>` on a branch). The plan shows **2 to destroy in each environment**, and the deploy needs
 your approval for `qa` and `prod` again.
 
 Then rebuild the demo branch. **Do not rebase it**: `main` now contains this change, and `git rebase` silently
