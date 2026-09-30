@@ -28,4 +28,14 @@ resource "snowflake_stage_external_s3" "landing" {
   url                 = local.location
   storage_integration = snowflake_storage_integration_aws.this.name
   comment             = "Raw file landing zone for ${var.environment}."
+
+  # Enabling or disabling the directory table forces the stage to be replaced, so it is off by default and
+  # switched on per environment. Lets you run SELECT * FROM DIRECTORY(@stage) to list the files in the stage.
+  dynamic "directory" {
+    for_each = var.directory_enabled ? [1] : []
+    content {
+      enable       = true
+      auto_refresh = "false" # no SNS wiring: refresh by hand with ALTER STAGE ... REFRESH
+    }
+  }
 }

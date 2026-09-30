@@ -76,7 +76,9 @@ module "s3_integration" {
   database    = module.database["RAW"].name
   bucket      = var.s3_integration.bucket
   prefix      = var.environment
-  role_arn    = "arn:aws:iam::${var.aws_account_id}:role/snowflake-s3-${var.environment}"
+
+  directory_enabled = var.s3_integration.directory_enabled
+  role_arn          = "arn:aws:iam::${var.aws_account_id}:role/snowflake-s3-${var.environment}"
 
   # The RAW_RW future grants must exist before the LANDING schema is created.
   depends_on = [module.rbac]

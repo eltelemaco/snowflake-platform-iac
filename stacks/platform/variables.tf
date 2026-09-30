@@ -46,8 +46,9 @@ variable "demo_users" {
 variable "s3_integration" {
   description = "S3 landing zone. The bucket and IAM role are created by bootstrap/aws."
   type = object({
-    enabled = optional(bool, false)
-    bucket  = optional(string, "")
+    enabled           = optional(bool, false)
+    bucket            = optional(string, "")
+    directory_enabled = optional(bool, false) # changing this replaces the stage
   })
   default = {}
 }

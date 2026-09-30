@@ -22,3 +22,9 @@ variable "role_arn" {
   type        = string
   sensitive   = true
 }
+
+variable "directory_enabled" {
+  description = "Enable the stage's directory table (list files with DIRECTORY(@stage)). Changing it replaces the stage."
+  type        = bool
+  default     = false
+}
