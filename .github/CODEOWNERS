@@ -1,0 +1,8 @@
+# Changes to how infrastructure is deployed, and to the privileged bootstrap,
+# request a review from the platform owner automatically.
+# To make this binding, turn on "Require review from Code Owners" in branch
+# protection once there is a second maintainer (a sole author cannot approve their own PR).
+/.github/          @eltelemaco
+/bootstrap/        @eltelemaco
+/stacks/governance/ @eltelemaco
+/envs/prod/        @eltelemaco

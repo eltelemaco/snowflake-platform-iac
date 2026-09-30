@@ -1,7 +1,7 @@
 name: deploy
 
 # Merge to main: plan every environment, then apply dev -> qa -> prod.
-# Each apply job binds to a GitHub environment. `prod` has a required reviewer,
+# Each apply job binds to a GitHub environment. `qa` and `prod` have a required reviewer,
 # so the pipeline pauses there until a human approves the plan they can read.
 on:
   push:

@@ -16,7 +16,7 @@ history and pull requests.
 | Infrastructure as code for warehouses, roles, grants, cost limits, network policy | Terraform modules composed per environment | `modules/`, `stacks/platform` |
 | Least-privilege RBAC | Access roles hold privileges, functional roles inherit them, users only get functional roles | `modules/rbac` |
 | Keyless CI/CD | GitHub OIDC to AWS and to Snowflake (workload identity federation) | `.github/actions/tf-init`, `bootstrap/` |
-| Promotion with approvals | PR plans for all envs, merge deploys `dev` then `qa`, `prod` waits for a human | `.github/workflows/deploy.yml` |
+| Promotion with approvals | PR plans for all envs, merge deploys `dev`, then `qa` and `prod` each wait for a human | `.github/workflows/deploy.yml` |
 | Manual promotion | Deploy one commit to one environment (pin `qa`, hotfix `prod`), plan-only by default | `.github/workflows/promote.yml` |
 | Drift detection | Nightly plan per env, opens or closes a GitHub issue, never auto-fixes | `.github/workflows/drift.yml` |
 | Cost governance | Monthly resource monitors, small warehouses, statement timeouts | `stacks/governance`, `modules/warehouse` |
@@ -31,8 +31,9 @@ flowchart LR
   gh --> val["validate<br/>fmt, validate, tflint, trivy"]
   gh --> plan["plan dev / qa / prod<br/>posted as PR comment"]
   plan -- merge to main --> dep[deploy]
-  dep --> ad["apply dev<br/>apply qa"]
-  ad --> gate{{"prod approval<br/>required reviewer"}}
+  dep --> ad["apply dev"]
+  ad --> gq{{"qa approval"}} --> aq[apply qa]
+  aq --> gate{{"prod approval<br/>required reviewer"}}
   gate --> ap[apply prod]
 
   subgraph identity["Keyless identity: OIDC tokens, nothing stored"]
@@ -85,7 +86,7 @@ Branch-per-environment drifts (hotfixes that never merge back) and turns promoti
 The automatic path always walks `dev` then `qa` then `prod`. For what it cannot express, `promote.yml`
 deploys a chosen commit to a chosen environment. It only accepts commits reachable from `main`, runs
 from `main` (the OIDC identities are bound to it), and is **plan-only unless `apply` is ticked**,
-because `dev` and `qa` have no approval gate. Applying to `prod` still stops at the reviewer.
+because `dev` has no approval gate. Applying to `qa` or `prod` still stops at the reviewer.
 
 ```
 gh workflow run promote.yml -f environment=qa -f ref=<sha-or-tag>                 # plan only
@@ -143,7 +144,9 @@ account ID and role ARN are `sensitive` Terraform values so they do not appear i
 3. **TFLint has no Snowflake ruleset.** It catches generic Terraform issues only. `validate`,
    `trivy` and the plan are the real safety net.
 4. **Actions are pinned to major versions, not commit SHAs.** Production would pin SHAs.
-5. **Admin bypass is on for branch protection.** Right for a one-person repo, wrong for a team.
+5. **Admin bypass is on for branch protection, and CODEOWNERS is advisory.** `CODEOWNERS` requests a
+   review on workflow, bootstrap and prod changes, but a sole author cannot approve their own PR, so it
+   is not enforced. With a second maintainer: require code-owner review and turn off the bypass.
 6. **Drift on `snowflake_execute` resources (monitor attachment) is not detected.** The nightly
    plan covers everything else.
 7. **Single account.** See above.
@@ -171,7 +174,7 @@ envs/governance/    root for the governance stack
    subjects to your repo (`gh api repos/<repo>/actions/oidc/customization/sub`).
 2. **AWS:** `cd bootstrap/aws && AWS_PROFILE=<non-prod> TF_VAR_expected_account_id=<id> terraform apply`.
    The `allowed_account_ids` guard aborts if the credentials belong to another account.
-3. **GitHub:** create environments `dev`, `qa`, `prod` (required reviewer on `prod`, deploy only from
+3. **GitHub:** create environments `dev`, `qa`, `prod` (required reviewer on `qa` and `prod`, deploy only from
    `main`). Set repo secrets `SNOWFLAKE_ORGANIZATION_NAME`, `SNOWFLAKE_ACCOUNT_NAME`,
    `TF_STATE_BUCKET`, `AWS_PLAN_ROLE_ARN`, `AWS_ACCOUNT_ID`, and per-environment secret `AWS_APPLY_ROLE_ARN`.
 4. **S3 trust (once per environment, after its first deploy):** read each environment's
@@ -194,3 +197,7 @@ See [`docs/demo-script.md`](docs/demo-script.md) for a five-minute walkthrough.
 | Cost governance | monitors, X-Small warehouses, 60s auto-suspend, statement timeouts |
 | Operating it | drift issues, saved-plan applies, break-glass governance stack |
 | Cross-platform (AWS + Snowflake) | S3 state, OIDC roles and a storage integration on AWS, WIF on the Snowflake side |
+
+## License
+
+MIT, see [LICENSE](LICENSE).

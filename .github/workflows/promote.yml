@@ -8,7 +8,7 @@ name: promote
 #  * runs from main only, because the OIDC identities and GitHub environments
 #    are bound to it;
 #  * the commit must be reachable from main, so nothing unreviewed can ship;
-#  * plan-only unless `apply` is ticked. dev and qa have no approval gate, so
+#  * plan-only unless `apply` is ticked. dev has no approval gate, so
 #    without this an old commit could be applied to them by a single click.
 on:
   workflow_dispatch:
