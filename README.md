@@ -11,7 +11,7 @@ history and pull requests.
 
 ## Status
 
-Deployed and verified against a live Snowflake account (last full check: 2026-09-30). Every
+Deployed and verified against a live Snowflake account (last full check: 2026-09-29). Every
 environment's plan is empty, meaning the code matches reality.
 
 | | `dev` | `qa` | `prod` |
