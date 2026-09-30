@@ -74,7 +74,7 @@ Fallback if live steps fail: drift run https://github.com/eltelemaco/snowflake-p
 
 `gh workflow run promote.yml -f environment=qa -f ref=<older sha>` runs plan-only by default. Show the
 summary (commit, mode) and the plan. Then point out the two guardrails: the commit must be on `main`,
-and nothing applies unless `apply` is ticked. Prod still pauses for approval.
+and nothing applies unless `apply` is ticked. qa and prod still pause for approval.
 
 ## Optional, 45 seconds . AWS and Snowflake together
 
