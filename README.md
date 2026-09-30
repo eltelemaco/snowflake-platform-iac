@@ -143,7 +143,9 @@ account ID and role ARN are `sensitive` Terraform values so they do not appear i
 3. **TFLint has no Snowflake ruleset.** It catches generic Terraform issues only. `validate`,
    `trivy` and the plan are the real safety net.
 4. **Actions are pinned to major versions, not commit SHAs.** Production would pin SHAs.
-5. **Admin bypass is on for branch protection.** Right for a one-person repo, wrong for a team.
+5. **Admin bypass is on for branch protection, and CODEOWNERS is advisory.** `CODEOWNERS` requests a
+   review on workflow, bootstrap and prod changes, but a sole author cannot approve their own PR, so it
+   is not enforced. With a second maintainer: require code-owner review and turn off the bypass.
 6. **Drift on `snowflake_execute` resources (monitor attachment) is not detected.** The nightly
    plan covers everything else.
 7. **Single account.** See above.
@@ -194,3 +196,7 @@ See [`docs/demo-script.md`](docs/demo-script.md) for a five-minute walkthrough.
 | Cost governance | monitors, X-Small warehouses, 60s auto-suspend, statement timeouts |
 | Operating it | drift issues, saved-plan applies, break-glass governance stack |
 | Cross-platform (AWS + Snowflake) | S3 state, OIDC roles and a storage integration on AWS, WIF on the Snowflake side |
+
+## License
+
+MIT, see [LICENSE](LICENSE).
