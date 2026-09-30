@@ -1,106 +1,108 @@
-# Five-minute walkthrough
+# Ten-minute walkthrough
 
-Goal: show a change going from a pull request to production with approval, then show the platform
-noticing an out-of-band change. Everything here has been run for real. Past runs are linked as a
-fallback if the live demo misbehaves.
+One live change, from pull request to Snowflake, with everything that protects it visible on the way.
+The live change is a new schema and table in `dev`, already prepared on branch `demo/sales-orders`
+(PR #9, closed, ready to reopen). Everything here has been run for real. Linked runs are the fallback
+if something misbehaves live.
 
 Repo: https://github.com/eltelemaco/snowflake-platform-iac
 
-## Before you start (2 minutes, not part of the five)
+## Before you start (2 minutes, not part of the ten)
 
-- Snowsight open on the trial account, worksheet as `TF_DEPLOYER` or your admin user.
-- `gh auth status` is green. Browser tabs open on the repo's **Actions** and **Pull requests** pages.
-- Confirm a clean start: `DEV_LOAD_WH` is `X-Small` and there is no open issue labelled `drift`.
+1. Tabs open: the repo (**Actions** and **Pull requests**), Snowsight, the README.
+2. Confirm the demo branch is current with `main` (branch protection requires it):
+   `git fetch && git log --oneline origin/main..origin/demo/sales-orders` should show one commit, and
+   `git log --oneline origin/demo/sales-orders..origin/main` should show none. If `main` moved, run
+   `git checkout demo/sales-orders && git rebase origin/main && git push --force-with-lease`.
+3. Confirm `DEV_RAW.SALES` does not exist yet: `SHOW SCHEMAS LIKE 'SALES' IN DATABASE DEV_RAW;`
 
-## 0:00 to 1:00 . The idea
+## 0:00 to 1:30 . The idea and the layout
 
-> "Everything in this Snowflake account is created by Terraform, and the only thing that runs
-> Terraform is a pipeline that holds no credentials."
+> "Everything in this Snowflake account is Terraform, and the only thing that runs Terraform is a
+> pipeline that holds no credentials."
 
-Show the README diagram, then the tree: `modules/`, `stacks/platform` (the main module),
-`envs/dev|qa|prod` (thin roots that differ only in `terraform.tfvars`).
+README diagram, then the tree: `modules/` (leaf objects), `stacks/platform` (the main module),
+`envs/dev|qa|prod` (thin roots). Open `envs/prod/terraform.tfvars` beside `envs/dev/terraform.tfvars`:
+prod keeps data 7 days, dev 1. **Promotion is a config diff, not a code copy.** No branch per
+environment: the same commit runs everywhere.
 
-Point at `envs/prod/terraform.tfvars` vs `envs/dev/terraform.tfvars`: prod retention is 7 days,
-dev is 1. Promotion is a config diff.
+## 1:30 to 4:00 . The change (live)
 
-## 1:00 to 2:30 . A change, end to end
+1. Show the diff on `demo/sales-orders`: about 20 lines in `envs/dev/terraform.tfvars`, declaring a
+   `SALES` schema and an `ORDERS` table. No new Terraform code, only configuration.
+2. Reopen the PR: `gh pr reopen 9 --repo eltelemaco/snowflake-platform-iac`
+3. While the checks run (about a minute) say what they are: `validate` (fmt, validate, tflint, trivy)
+   and a plan for **all three environments**.
+4. Read the plan comment: **dev adds 2 resources, qa and prod show No changes.** Reviewers see the
+   blast radius before approving.
 
-Open the merged pull request "dev: add SANDBOX database" (#1).
+> "Nobody can merge until these four checks pass. The plan a person reads is the plan file that gets
+> applied. If state changed in between, Terraform refuses it."
 
-1. The bot comment: a plan for **all three environments**. Dev adds 13 resources, qa and prod
-   show "No changes". Reviewers see blast radius before approving.
-2. The checks: `validate` (fmt, validate, tflint, trivy) and three plans. All required by branch
-   protection.
-3. Actions history: the deploy after merge applied **dev only**, and skipped qa and prod because
-   their plans were empty.
+## 4:00 to 7:00 . Merge, deploy, and why there are no secrets
 
-> "The plan a person reviews is the plan file the apply uses. If state moved in between,
-> Terraform refuses it."
+1. Merge PR #9. Open the `deploy` run: validate, three plans, then `apply-dev`.
+2. While it runs (about two minutes), open a plan job log and point at `role-to-assume: ***`.
 
-Live variant if time allows: open a tiny PR (bump a warehouse `auto_suspend_seconds` in
-`envs/dev/terraform.tfvars`) and show the checks appear.
-
-## 2:30 to 3:30 . No secrets, and why prod needs a human
-
-Open a job log from a plan run and point at `role-to-assume: ***` and the masked account values.
-
-> "Nothing here is a stored credential. GitHub mints a token per job. AWS and Snowflake both trust
+> "There is no stored credential anywhere. GitHub mints a token per job. AWS and Snowflake each trust
 > only a specific subject, so a job in dev cannot become the prod user."
 
-Show the Snowflake side: `SHOW USERS LIKE 'SVC_TF_%'` and the five `WORKLOAD_IDENTITY` users. Then
-the `prod` environment settings (required reviewer, deploys only from `main`) and the earlier
-`deploy` run that paused on **Review deployments**.
+3. Show the environments page: `qa` and `prod` require a reviewer, all three only accept `main`.
+   Explain that qa and prod would have paused here had this change touched them.
+4. Show the Snowflake side: `SHOW USERS LIKE 'SVC_TF_%';` lists the workload-identity service users.
 
-## 3:30 to 4:45 . Drift
+## 7:00 to 8:30 . Proof in Snowflake
 
-1. In Snowsight: `ALTER WAREHOUSE DEV_LOAD_WH SET WAREHOUSE_SIZE = SMALL;`
-2. Trigger detection now instead of waiting for the nightly cron:
-   `gh workflow run drift.yml --ref main`
-3. Show the run: `report` fails on purpose, and issue **"Drift detected: dev"** contains the diff
-   `warehouse_size = "SMALL" -> "XSMALL"`.
-4. Remediate through the pipeline, not by hand: run the `deploy` workflow. `apply-dev` puts the
-   size back. Re-run drift and the issue closes itself.
+When `apply-dev` is green, in Snowsight:
 
-> "It reports, it does not auto-fix. On prod I want a person deciding whether the console change or
-> the code is wrong."
+```sql
+SHOW TABLES IN SCHEMA DEV_RAW.SALES;
+DESC TABLE DEV_RAW.SALES.ORDERS;
+SHOW GRANTS ON TABLE DEV_RAW.SALES.ORDERS;
+```
 
-Fallback if live steps fail: drift run https://github.com/eltelemaco/snowflake-platform-iac/issues/2
+The last one is the point: `DEV_RAW_RO` and `DEV_RAW_RW` already hold the right privileges, because
+database-level future grants cover any new object. **No per-object grants were written.**
 
-## Optional, 30 seconds . Promotion without branches
+## 8:30 to 9:30 . One guardrail, pick one
 
-> "There is no branch per environment: the same commit runs everywhere and only tfvars differ. When I
-> need something the automatic path can't do, like pinning qa or a prod hotfix, I promote one commit
-> to one environment by hand."
+- **Drift (60s):** `ALTER WAREHOUSE DEV_LOAD_WH SET WAREHOUSE_SIZE = SMALL;` then
+  `gh workflow run drift.yml --ref main`. It opens **"Drift detected: dev"** with the diff and never
+  auto-fixes. Fix it afterwards with `gh workflow run deploy.yml --ref main` (issue closes on the
+  next drift run). Fallback: https://github.com/eltelemaco/snowflake-platform-iac/issues/2
+- **Cost (30s):** `SHOW RESOURCE MONITORS;` shows a monthly cap per environment and on the account.
+  Explain why it is a separate `ACCOUNTADMIN` stack, applied by a human: attaching a monitor needs
+  account-wide `MODIFY`, which the pipeline should not hold.
 
-`gh workflow run promote.yml -f environment=qa -f ref=<older sha>` runs plan-only by default. Show the
-summary (commit, mode) and the plan. Then point out the two guardrails: the commit must be on `main`,
-and nothing applies unless `apply` is ticked. qa and prod still pause for approval.
+## 9:30 to 10:00 . Honest limits
 
-## Optional, 45 seconds . AWS and Snowflake together
+Say two of them from the README's **Known limitations** section, for example: the plan identities
+share the deployer role (next step is a read-only planner), and environments are prefixes in one
+account because a trial cannot have more.
 
-In Snowsight: `LIST @DEV_RAW.LANDING.S3_LANDING;` shows `dev/samples/hello.csv`. Then, to show
-isolation, try to point the dev integration at prod:
-`CREATE TEMPORARY STAGE DEV_RAW.LANDING.T URL='s3://<bucket>/prod/' STORAGE_INTEGRATION=DEV_S3_INTEGRATION;`
-It is refused: "Location ... is not allowed by integration DEV_S3_INTEGRATION".
+## After the demo: reset
 
-> "The pipeline that deploys Snowflake has no IAM permissions. The AWS side is a separate,
-> human-run stack, and the two sides meet through a trust handshake."
+To run it again, remove the change: revert the merge commit through a PR
+(`git revert <sha>` on a branch). The pipeline then destroys the schema and table.
 
-## 4:45 to 5:00 . What I would do next
+## Extras if asked (not in the ten minutes)
 
-Read the **Known limitations** section aloud, at least the first two:
-plan users share the deployer role (next: read-only planner), and Snowflake resource monitors need
-`ACCOUNTADMIN`, so they are a deliberate manual stack outside the pipeline.
+- **Manual promotion:** `gh workflow run promote.yml -f environment=qa -f ref=<sha>` is plan-only by
+  default. It only accepts commits on `main`. Promoting an old commit shows what a rollback would
+  destroy without touching anything.
+- **AWS and Snowflake together:** `LIST @DEV_RAW.LANDING.S3_LANDING;` reads `dev/` in S3 through a
+  storage integration. Pointing the dev integration at `prod/` is refused.
 
 ## Questions to expect
 
-- **Why not a Snowflake account per environment?** Trial limit. Production would use one per env
-  and the same code, since each root already has its own state and variables.
-- **Why is governance a separate manual stack?** Attaching a monitor needs account-level
-  `MODIFY`. I would not give the pipeline that. Cost controls being harder to change than the
-  platform itself is intentional.
-- **Why plan without a GitHub environment?** Environment protection would pause every PR plan on
-  the prod approval. Apply is the only step that needs a human.
+- **Why not a Snowflake account per environment?** Trial limit. Production would use one per
+  environment and the same code, since each root already has its own state and variables.
+- **Why is governance a separate manual stack?** Attaching a monitor needs account-level `MODIFY`.
+  Cost controls being harder to change than the platform itself is intentional.
+- **Why plan without a GitHub environment?** Environment protection would pause every PR plan on the
+  approval. Apply is the only step that needs a human.
+- **Why no branch per environment?** The same commit is tested in dev and shipped to prod. Branches
+  drift, and promotion turns into a code merge.
 - **What if the state bucket is lost?** It is versioned. Restore the previous object version.
-- **How would this scale to a team?** CODEOWNERS on workflows, a real second reviewer on prod,
+- **How would this scale to a team?** Code-owner review on workflows, a second reviewer on prod,
   self-hosted runners with fixed egress, per-environment accounts, and a read-only planner role.
