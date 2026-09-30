@@ -5,8 +5,10 @@ name: drift-detection
 # because fixing prod needs a human decision.
 #
 # Three protections make a short interval safe:
-#  1. guard:       skip the run while a deploy or promote is in progress or parked at an approval gate.
-#                  Otherwise "code is ahead of Snowflake" would be reported as drift.
+#  1. guard:       skip the run while a deploy or promote is in progress, or parked at an approval gate for
+#                  less than max_wait_minutes (default 60). Otherwise "code is ahead of Snowflake" would be
+#                  reported as drift. A run parked longer than that is a human decision left hanging, and it must
+#                  not hide drift for the up-to-30 days GitHub lets it wait: it is ignored, with a warning.
 #  2. concurrency: two drift runs never overlap.
 #  3. signature:   a drift issue is commented on only when the plan changed since the last report,
 #                  so persistent drift produces one issue, not twelve comments a day.
@@ -15,6 +17,11 @@ on:
     # Minute 17, not 0: the top of the hour is when GitHub's scheduler is most congested.
     - cron: "17 */2 * * *"
   workflow_dispatch:
+    inputs:
+      max_wait_minutes:
+        description: "How long a deploy/promote parked at an approval gate still counts as busy"
+        type: string
+        default: "60"
 
 permissions:
   id-token: write
@@ -35,14 +42,29 @@ jobs:
       - id: check
         env:
           GH_TOKEN: ${{ github.token }}
+          MAX_WAIT_MINUTES: ${{ inputs.max_wait_minutes || '60' }}   # scheduled runs have no inputs: default 60
         run: |
-          busy=$(gh run list --repo "$GITHUB_REPOSITORY" --limit 30 --json workflowName,status \
-            --jq '[.[] | select((.workflowName=="deploy" or .workflowName=="promote") and .status!="completed")] | length')
+          case "$MAX_WAIT_MINUTES" in ""|*[!0-9]*) MAX_WAIT_MINUTES=60 ;; esac   # a typo must not break the guard
+          max=$(( MAX_WAIT_MINUTES * 60 ))
+          # busy = running/queued, or waiting at a gate for less than $max seconds
+          busy_filter='[.[] | select(.workflowName=="deploy" or .workflowName=="promote")
+            | select(.status!="completed")
+            | select(.status!="waiting" or ((now - (.createdAt|fromdateiso8601)) < $max))] | length'
+          # stale = waiting at a gate for $max seconds or more (ignored, but reported)
+          stale_filter='[.[] | select(.workflowName=="deploy" or .workflowName=="promote")
+            | select(.status=="waiting")
+            | select((now - (.createdAt|fromdateiso8601)) >= $max)] | length'
+          runs=$(gh run list --repo "$GITHUB_REPOSITORY" --limit 30 --json workflowName,status,createdAt)
+          busy=$(echo "$runs" | jq --argjson max "$max" "$busy_filter")
+          stale=$(echo "$runs" | jq --argjson max "$max" "$stale_filter")
           if [ "$busy" -gt 0 ]; then
             echo "busy=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping this drift check: $busy deploy/promote run(s) in progress or waiting for approval."
+            echo "::notice::Skipping this drift check: $busy deploy/promote run(s) in progress or waiting for approval (under $MAX_WAIT_MINUTES min)."
           else
             echo "busy=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$stale" -gt 0 ]; then
+            echo "::warning::$stale deploy/promote run(s) have been waiting for approval for over $MAX_WAIT_MINUTES min. They no longer block drift checks; approve or cancel them."
           fi
 
   plan-dev:
