@@ -1,7 +1,7 @@
 # Snowflake Platform as Code
 
 Terraform and GitHub Actions that build and run a Snowflake platform across `dev`, `qa` and `prod`,
-with **no stored credentials**, approval-gated `qa` and `prod` deploys, nightly drift detection and
+with **no stored credentials**, approval-gated `qa` and `prod` deploys, scheduled drift detection (every 2 hours) and
 cost guardrails. Built as a working demo of how I would run a data platform, not a toy: every
 claim below was executed against a real Snowflake account and is visible in this repo's Actions
 history and pull requests.
@@ -34,7 +34,7 @@ governance stack, which are human-run by design (see below).
 | Keyless CI/CD | GitHub OIDC to AWS and to Snowflake (workload identity federation) | `.github/actions/tf-init`, `bootstrap/` |
 | Promotion with approvals | PR plans for all envs, merge deploys `dev`, then `qa` and `prod` each wait for a human | `.github/workflows/deploy.yml` |
 | Manual promotion | Deploy one commit to one environment (pin `qa`, hotfix `prod`), plan-only by default | `.github/workflows/promote.yml` |
-| Drift detection | Nightly plan per env, opens or closes a GitHub issue, never auto-fixes | `.github/workflows/drift.yml` |
+| Drift detection | Plan per env every 2 hours, opens or closes a GitHub issue, never auto-fixes, skips while a deploy is running | `.github/workflows/drift.yml` |
 | Cost governance | Monthly resource monitors, small warehouses, statement timeouts | `stacks/governance`, `modules/warehouse` |
 | Validation | `fmt`, `validate`, `tflint`, `trivy` as required checks | `.github/workflows/terraform-validate.yml` |
 | AWS to Snowflake data access | S3 landing bucket, storage integration and external stage per environment, read-only, prefix-isolated | `modules/s3_integration`, `bootstrap/aws/landing.tf` |
@@ -64,7 +64,7 @@ flowchart LR
   ap -.-> aws
   ap -.-> sf
 
-  cron([nightly schedule]) --> drift[drift plan x3]
+  cron([every 2 hours]) --> drift[drift plan x3]
   drift -.-> aws
   drift -.-> sf
   drift -- differs --> issue[GitHub issue]
@@ -181,7 +181,7 @@ account ID and role ARN are `sensitive` Terraform values so they do not appear i
 5. **Admin bypass is on for branch protection, and CODEOWNERS is advisory.** `CODEOWNERS` requests a
    review on workflow, bootstrap and prod changes, but a sole author cannot approve their own PR, so it
    is not enforced. With a second maintainer: require code-owner review and turn off the bypass.
-6. **Drift on `snowflake_execute` resources (monitor attachment) is not detected.** The nightly
+6. **Drift on `snowflake_execute` resources (monitor attachment) is not detected.** The scheduled
    plan covers everything else.
 7. **Single account.** See above.
 8. **The S3 trust handoff is manual.** After a new environment's integration exists, its IAM user and

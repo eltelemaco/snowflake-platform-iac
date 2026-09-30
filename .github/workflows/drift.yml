@@ -1,35 +1,72 @@
 name: drift-detection
 
-# Nightly `terraform plan` against every environment. Any diff means someone
-# changed Snowflake outside the pipeline (or code merged without applying).
-# It reports; it never auto-remediates. Fixing prod needs a human decision.
+# `terraform plan` against every environment every two hours. Any diff means someone changed Snowflake
+# outside the pipeline (or code merged without being applied). It reports; it never auto-remediates,
+# because fixing prod needs a human decision.
+#
+# Three protections make a short interval safe:
+#  1. guard:       skip the run while a deploy or promote is in progress or parked at an approval gate.
+#                  Otherwise "code is ahead of Snowflake" would be reported as drift.
+#  2. concurrency: two drift runs never overlap.
+#  3. signature:   a drift issue is commented on only when the plan changed since the last report,
+#                  so persistent drift produces one issue, not twelve comments a day.
 on:
   schedule:
-    - cron: "0 6 * * *"
+    # Minute 17, not 0: the top of the hour is when GitHub's scheduler is most congested.
+    - cron: "17 */2 * * *"
   workflow_dispatch:
 
 permissions:
   id-token: write
   contents: read
   issues: write
+  actions: read   # the guard lists workflow runs
+
+concurrency:
+  group: drift-detection
+  cancel-in-progress: false
 
 jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      busy: ${{ steps.check.outputs.busy }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          busy=$(gh run list --repo "$GITHUB_REPOSITORY" --limit 30 --json workflowName,status \
+            --jq '[.[] | select((.workflowName=="deploy" or .workflowName=="promote") and .status!="completed")] | length')
+          if [ "$busy" -gt 0 ]; then
+            echo "busy=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping this drift check: $busy deploy/promote run(s) in progress or waiting for approval."
+          else
+            echo "busy=false" >> "$GITHUB_OUTPUT"
+          fi
+
   plan-dev:
+    needs: guard
+    if: needs.guard.outputs.busy == 'false'
     uses: ./.github/workflows/terraform-plan.yml
     secrets: inherit
     with: { environment: dev, snowflake_user: SVC_TF_PLAN_MAIN }
   plan-qa:
+    needs: guard
+    if: needs.guard.outputs.busy == 'false'
     uses: ./.github/workflows/terraform-plan.yml
     secrets: inherit
     with: { environment: qa, snowflake_user: SVC_TF_PLAN_MAIN }
   plan-prod:
+    needs: guard
+    if: needs.guard.outputs.busy == 'false'
     uses: ./.github/workflows/terraform-plan.yml
     secrets: inherit
     with: { environment: prod, snowflake_user: SVC_TF_PLAN_MAIN }
 
   report:
-    needs: [plan-dev, plan-qa, plan-prod]
-    if: ${{ !cancelled() }}
+    needs: [guard, plan-dev, plan-qa, plan-prod]
+    if: ${{ !cancelled() && needs.guard.outputs.busy == 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
@@ -44,6 +81,10 @@ jobs:
           CODE_QA: ${{ needs.plan-qa.outputs.exitcode }}
           CODE_PROD: ${{ needs.plan-prod.outputs.exitcode }}
         run: |
+          # Fingerprint of a plan. The "Refreshing state..." lines come out in a different order every run,
+          # so they are excluded; what remains (the actual diff) is deterministic.
+          signature() { grep -v -E 'Refreshing state|Reading\.\.\.|Read complete after|Still (reading|refreshing)' "$1" | sha256sum | cut -c1-16; }
+
           gh label create drift --color B60205 --description "Snowflake differs from code" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
           drift=0
           for env in dev qa prod; do
@@ -52,12 +93,24 @@ jobs:
             existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label drift --state open --search "\"$title\" in:title" --json number --jq '.[0].number')
             if [ "$code" = "2" ]; then
               drift=1
-              { echo "Nightly plan for **$env** is not empty. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-                echo; echo '```'; tail -c 50000 "plans/plan-$env/plan.txt"; echo '```'; } > body.md
-              if [ -n "$existing" ]; then gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file body.md
-              else gh issue create --repo "$GITHUB_REPOSITORY" --label drift --title "$title" --body-file body.md; fi
+              sig=$(signature "plans/plan-$env/plan.txt")
+              { echo "Scheduled plan for **$env** is not empty. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+                echo; echo '```'; tail -c 50000 "plans/plan-$env/plan.txt"; echo '```'
+                echo "<!-- plan-sig:$sig -->"; } > body.md
+              if [ -n "$existing" ]; then
+                last_sig=$(gh issue view "$existing" --repo "$GITHUB_REPOSITORY" --json body,comments \
+                  --jq '([.body] + [.comments[].body]) | map(select(test("plan-sig:"))) | last // ""' \
+                  | grep -o 'plan-sig:[0-9a-f]*' | tail -1 | cut -d: -f2 || true)
+                if [ "$sig" = "$last_sig" ]; then
+                  echo "$env: drift unchanged since the last report (plan-sig $sig); not commenting again"
+                else
+                  gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file body.md
+                fi
+              else
+                gh issue create --repo "$GITHUB_REPOSITORY" --label drift --title "$title" --body-file body.md
+              fi
             elif [ "$code" = "0" ] && [ -n "$existing" ]; then
-              gh issue close "$existing" --repo "$GITHUB_REPOSITORY" --comment "Drift resolved: nightly plan is clean."
+              gh issue close "$existing" --repo "$GITHUB_REPOSITORY" --comment "Drift resolved: the scheduled plan is clean."
             fi
           done
           exit $drift
