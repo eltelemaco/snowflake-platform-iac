@@ -1,0 +1,87 @@
+name: promote
+
+# Manual promotion of ONE commit to ONE environment. The automatic path
+# (deploy.yml) always walks dev -> qa -> prod; this is for the cases it cannot
+# express: pinning qa to a release, or a hotfix that goes to prod alone.
+#
+# Guardrails:
+#  * runs from main only, because the OIDC identities and GitHub environments
+#    are bound to it;
+#  * the commit must be reachable from main, so nothing unreviewed can ship;
+#  * plan-only unless `apply` is ticked. dev and qa have no approval gate, so
+#    without this an old commit could be applied to them by a single click.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy to
+        type: choice
+        options: [dev, qa, prod]
+        required: true
+      ref:
+        description: Commit SHA, tag or branch on main. Default is the tip of main.
+        type: string
+        default: main
+      apply:
+        description: Apply after planning. Unticked means plan only.
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: promote-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.r.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: r
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          sha=$(git rev-parse --verify --quiet "${REF}^{commit}" || git rev-parse --verify --quiet "origin/${REF}^{commit}") \
+            || { echo "::error::Cannot resolve '${REF}' to a commit"; exit 1; }
+          git merge-base --is-ancestor "$sha" origin/main \
+            || { echo "::error::$sha is not reachable from main; refusing to deploy it"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Promote \`${{ inputs.environment }}\`"
+            echo "- commit: \`$sha\` ($(git log -1 --format=%s "$sha"))"
+            echo "- mode: **${{ inputs.apply && 'plan and apply' || 'plan only' }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    needs: resolve
+    uses: ./.github/workflows/terraform-validate.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+
+  plan:
+    needs: [resolve, validate]
+    uses: ./.github/workflows/terraform-plan.yml
+    secrets: inherit
+    with:
+      environment: ${{ inputs.environment }}
+      snowflake_user: SVC_TF_PLAN_MAIN
+      ref: ${{ needs.resolve.outputs.sha }}
+
+  apply:
+    needs: [resolve, plan]
+    if: ${{ inputs.apply && needs.plan.outputs.exitcode == '2' }}
+    uses: ./.github/workflows/terraform-apply.yml
+    secrets: inherit
+    with:
+      environment: ${{ inputs.environment }}
+      snowflake_user: ${{ fromJSON('{"dev":"SVC_TF_DEV","qa":"SVC_TF_QA","prod":"SVC_TF_PROD"}')[inputs.environment] }}
+      ref: ${{ needs.resolve.outputs.sha }}

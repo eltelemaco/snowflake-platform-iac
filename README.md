@@ -17,6 +17,7 @@ history and pull requests.
 | Least-privilege RBAC | Access roles hold privileges, functional roles inherit them, users only get functional roles | `modules/rbac` |
 | Keyless CI/CD | GitHub OIDC to AWS and to Snowflake (workload identity federation) | `.github/actions/tf-init`, `bootstrap/` |
 | Promotion with approvals | PR plans for all envs, merge deploys `dev` then `qa`, `prod` waits for a human | `.github/workflows/deploy.yml` |
+| Manual promotion | Deploy one commit to one environment (pin `qa`, hotfix `prod`), plan-only by default | `.github/workflows/promote.yml` |
 | Drift detection | Nightly plan per env, opens or closes a GitHub issue, never auto-fixes | `.github/workflows/drift.yml` |
 | Cost governance | Monthly resource monitors, small warehouses, statement timeouts | `stacks/governance`, `modules/warehouse` |
 | Validation | `fmt`, `validate`, `tflint`, `trivy` as required checks | `.github/workflows/terraform-validate.yml` |
@@ -77,6 +78,19 @@ approval. Apply is the only thing that needs a human.
 `repo:<owner>@<owner-id>/<repo>@<repo-id>:...`, which survive renames and cannot be inherited by
 a recreated repo of the same name. My first trust policies used the old name-only form and AWS
 rejected the token. Check yours with `gh api repos/<repo>/actions/oidc/customization/sub`.
+
+**One trunk, not a branch per environment.** The same commit is deployed to every environment and only
+`envs/<env>/terraform.tfvars` differs, so what was tested in `dev` is byte-for-byte what reaches `prod`.
+Branch-per-environment drifts (hotfixes that never merge back) and turns promotion into a code merge.
+The automatic path always walks `dev` then `qa` then `prod`. For what it cannot express, `promote.yml`
+deploys a chosen commit to a chosen environment. It only accepts commits reachable from `main`, runs
+from `main` (the OIDC identities are bound to it), and is **plan-only unless `apply` is ticked**,
+because `dev` and `qa` have no approval gate. Applying to `prod` still stops at the reviewer.
+
+```
+gh workflow run promote.yml -f environment=qa -f ref=<sha-or-tag>                 # plan only
+gh workflow run promote.yml -f environment=prod -f ref=<sha> -f apply=true         # plan, approval, apply
+```
 
 **Plan artifact is what gets applied.** The plan job saves the plan file, the apply job downloads
 it and applies exactly that. A reviewer approving `prod` approves the plan they can read. If state
@@ -148,7 +162,7 @@ stacks/platform/    the main module, composed per environment
 stacks/governance/  ACCOUNTADMIN-only controls, applied manually
 envs/{dev,qa,prod}/ thin roots: backend + terraform.tfvars
 envs/governance/    root for the governance stack
-.github/workflows/  reusable validate / plan / apply, plus pr, deploy, drift callers
+.github/workflows/  reusable validate / plan / apply, plus pr, deploy, promote, drift callers
 ```
 
 ## Reproduce it
