@@ -103,9 +103,22 @@ jobs:
           CODE_QA: ${{ needs.plan-qa.outputs.exitcode }}
           CODE_PROD: ${{ needs.plan-prod.outputs.exitcode }}
         run: |
-          # Fingerprint of a plan. The "Refreshing state..." lines come out in a different order every run,
-          # so they are excluded; what remains (the actual diff) is deterministic.
-          signature() { grep -v -E 'Refreshing state|Reading\.\.\.|Read complete after|Still (reading|refreshing)' "$1" | sha256sum | cut -c1-16; }
+          # Fingerprint of a plan, used to comment on a drift issue only when the drift actually changed.
+          # Excluded, because they change on every run without any human action:
+          #  - "Refreshing state..." lines (come out in a different order every run);
+          #  - the provider's computed blocks (show_output / describe_output / parameters / outputs), which a
+          #    plan prints in full as "[ ... ] -> (known after apply)" and which carry created_on, updated_on,
+          #    resumed_on, state, running and queued;
+          #  - bare timestamp attributes.
+          # What remains is the diff itself: which resources, which attributes, and the Plan: summary.
+          # Terraform prints a block's closing bracket two columns right of its "~ name = [" line, hence ind + 2.
+          signature() {
+            grep -v -E 'Refreshing state|Reading\.\.\.|Read complete after|Still (reading|refreshing)' "$1" | awk '
+              skip { match($0, /^ */); if (RLENGTH == ind + 2 && $0 ~ /^ *[])}]/) skip = 0; next }
+              /^ *[~+-] (show_output|describe_output|parameters|outputs) += [\[{]$/ { match($0, /^ */); ind = RLENGTH; skip = 1; next }
+              /^ *[~+-] (created_on|updated_on|resumed_on|last_altered|last_ddl_time) +=/ { next }
+              { print }' | sha256sum | cut -c1-16
+          }
 
           gh label create drift --color B60205 --description "Snowflake differs from code" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
           drift=0
