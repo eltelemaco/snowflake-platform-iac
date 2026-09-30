@@ -19,3 +19,11 @@ output "s3_trust" {
   sensitive = true
   value     = var.s3_integration.enabled ? module.s3_integration[0].trust : null
 }
+
+output "schemas" {
+  value = [for m in module.schema : m.name]
+}
+
+output "tables" {
+  value = [for m in module.table : m.name]
+}

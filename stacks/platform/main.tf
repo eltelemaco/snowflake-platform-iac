@@ -96,3 +96,28 @@ resource "snowflake_grant_privileges_to_account_role" "landing_stage_usage" {
 
   depends_on = [module.rbac]
 }
+
+# Schemas and tables. The database-level future grants in module.rbac already cover
+# them, so a new schema or table is readable/writable by the right roles the moment it
+# exists. No per-object grants to write. depends_on makes the grants come first.
+module "schema" {
+  source   = "../../modules/schema"
+  for_each = var.schemas
+
+  database = module.database[each.value.database].name
+  name     = each.key
+  comment  = coalesce(each.value.comment, local.tags)
+
+  depends_on = [module.rbac]
+}
+
+module "table" {
+  source   = "../../modules/table"
+  for_each = var.tables
+
+  database = module.database[each.value.database].name
+  schema   = module.schema[each.value.schema].name
+  name     = each.key
+  columns  = each.value.columns
+  comment  = coalesce(each.value.comment, local.tags)
+}

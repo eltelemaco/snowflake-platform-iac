@@ -41,3 +41,26 @@ variable "aws_account_id" {
   default   = ""
   sensitive = true
 }
+
+variable "schemas" {
+  type = map(object({
+    database = string
+    comment  = optional(string)
+  }))
+  default = {}
+}
+
+variable "tables" {
+  type = map(object({
+    database = string
+    schema   = string
+    comment  = optional(string)
+    columns = list(object({
+      name     = string
+      type     = string
+      nullable = optional(bool, true)
+      comment  = optional(string)
+    }))
+  }))
+  default = {}
+}
