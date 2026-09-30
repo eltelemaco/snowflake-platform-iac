@@ -25,4 +25,7 @@ demo_users = {
 s3_integration = {
   enabled = true
   bucket  = "snowflake-platform-iac-landing-8e6407430e"
+
+  # Directory table on the stage, so files can be listed with DIRECTORY(@stage). dev only: it replaces the stage.
+  directory_enabled = true
 }

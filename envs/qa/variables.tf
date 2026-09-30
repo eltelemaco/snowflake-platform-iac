@@ -30,8 +30,9 @@ variable "demo_users" {
 
 variable "s3_integration" {
   type = object({
-    enabled = optional(bool, false)
-    bucket  = optional(string, "")
+    enabled           = optional(bool, false)
+    bucket            = optional(string, "")
+    directory_enabled = optional(bool, false) # changing this replaces the stage
   })
   default = {}
 }
