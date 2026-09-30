@@ -56,7 +56,20 @@ jobs:
           code=${PIPESTATUS[0]}
           set -e
           echo "exitcode=$code" >> "$GITHUB_OUTPUT"
-          { echo '### Plan: `${{ inputs.environment }}`'; echo '```'; tail -c 60000 plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          # Run-summary page: one collapsed block per environment, like the bot's PR comment. It is left open
+          # only when the plan itself failed, so the error is visible without a click.
+          result=$(grep -E '^(Plan:|No changes)' plan.txt | head -1)
+          [ -n "$result" ] || result="no plan result, see the job log"
+          open=""; [ "$code" = "1" ] && open=" open"
+          {
+            echo "<details$open><summary><b>${{ inputs.environment }}</b>: $result</summary>"
+            echo
+            echo '```'
+            tail -c 60000 plan.txt
+            echo '```'
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
           [ "$code" -ne 1 ]
 
       - uses: actions/upload-artifact@v7
