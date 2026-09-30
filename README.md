@@ -220,8 +220,8 @@ docs/               demo-script.md (10-minute walkthrough), planner-role-finding
    new environment so its warehouses get their monitor.
 6. **Deploy:** push to `main`. Everything after that is the pipeline.
 
-See [`docs/demo-script.md`](docs/demo-script.md) for a ten-minute walkthrough built around a live change
-(a new schema and table deployed through the pipeline).
+See [`docs/demo-script.md`](docs/demo-script.md) for a ten-minute walkthrough built around a live change:
+a new schema deployed to `dev`, `qa` and `prod` through the pipeline, pausing at the approval gates.
 
 ## How this maps to running a data platform
 
