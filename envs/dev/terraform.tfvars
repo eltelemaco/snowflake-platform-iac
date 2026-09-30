@@ -26,22 +26,3 @@ s3_integration = {
   enabled = true
   bucket  = "snowflake-platform-iac-landing-8e6407430e"
 }
-
-# Demo change: a new schema and table, deployed by the pipeline.
-schemas = {
-  SALES = { database = "RAW", comment = "Order data from the storefront" }
-}
-
-tables = {
-  ORDERS = {
-    database = "RAW"
-    schema   = "SALES"
-    comment  = "One row per customer order"
-    columns = [
-      { name = "ORDER_ID", type = "NUMBER(38,0)", nullable = false },
-      { name = "CUSTOMER", type = "VARCHAR(100)" },
-      { name = "AMOUNT", type = "NUMBER(12,2)" },
-      { name = "CREATED_AT", type = "TIMESTAMP_NTZ" },
-    ]
-  }
-}
