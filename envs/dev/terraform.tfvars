@@ -29,22 +29,3 @@ s3_integration = {
   # Directory table on the stage, so files can be listed with DIRECTORY(@stage). dev only: it replaces the stage.
   directory_enabled = true
 }
-
-# Demo change: the SALES schema and the ORDERS table.
-schemas = {
-  SALES = { database = "RAW", comment = "Order data from the storefront" }
-}
-
-tables = {
-  ORDERS = {
-    database = "RAW"
-    schema   = "SALES"
-    comment  = "One row per customer order"
-    columns = [
-      { name = "ORDER_ID", type = "NUMBER(38,0)", nullable = false },
-      { name = "CUSTOMER", type = "VARCHAR(100)" },
-      { name = "AMOUNT", type = "NUMBER(12,2)" },
-      { name = "CREATED_AT", type = "TIMESTAMP_NTZ" },
-    ]
-  }
-}
