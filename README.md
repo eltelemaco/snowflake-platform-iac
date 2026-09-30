@@ -1,13 +1,29 @@
 # Snowflake Platform as Code
 
 Terraform and GitHub Actions that build and run a Snowflake platform across `dev`, `qa` and `prod`,
-with **no stored credentials**, approval-gated production deploys, nightly drift detection and
+with **no stored credentials**, approval-gated `qa` and `prod` deploys, nightly drift detection and
 cost guardrails. Built as a working demo of how I would run a data platform, not a toy: every
 claim below was executed against a real Snowflake account and is visible in this repo's Actions
 history and pull requests.
 
 - **Snowflake:** Enterprise trial on AWS `us-east-1`. **AWS:** non-prod account for state and OIDC.
 - **Terraform** 1.15, provider `snowflakedb/snowflake` pinned to `2.21.0`.
+
+## Status
+
+Deployed and verified against a live Snowflake account (last full check: 2026-09-30). Every
+environment's plan is empty, meaning the code matches reality.
+
+| | `dev` | `qa` | `prod` |
+|---|---|---|---|
+| Databases | `RAW`, `ANALYTICS`, `SANDBOX` | `RAW`, `ANALYTICS` | `RAW`, `ANALYTICS` |
+| Warehouses | 2 x X-Small, monitored | 2 x X-Small, monitored | 2 x X-Small, monitored |
+| S3 landing stage | yes | yes | yes |
+| Deploy gate | none | reviewer | reviewer |
+| Time Travel | 1 day | 1 day | 7 days |
+
+Deployed by the pipeline through GitHub OIDC: everything except the one-time bootstrap and the
+governance stack, which are human-run by design (see below).
 
 ## What it does
 
@@ -70,6 +86,7 @@ public Actions logs print variables but mask secrets.
 | `SVC_TF_PLAN_PR` | `pull_request` | PR plans |
 | `SVC_TF_PLAN_MAIN` | `ref:refs/heads/main` | post-merge plans, drift |
 | `SVC_TF_DEV` / `QA` / `PROD` | `environment:<env>` | applies, gated by the GitHub environment |
+| `SVC_TF_LOCAL` | key pair, no OIDC | laptop runs and break-glass, private key never leaves the machine |
 
 Plans run **without** a GitHub environment on purpose. Environment protection rules gate every
 job that references the environment, so planning `prod` in a PR would otherwise stall on the
@@ -136,7 +153,10 @@ account ID and role ARN are `sensitive` Terraform values so they do not appear i
   egress is the production answer.
 - State bucket: versioned, encrypted, public access blocked, S3-native locking (no DynamoDB).
   Apply roles can write only their own environment's state key.
-- Branch protection on `main`: PR required, four checks required, no force-push.
+- Branch protection on `main`: PR required, four checks required, branch must be up to date, no
+  force-push, no deletion.
+- Public-repo hygiene: account identifiers are secrets (masked in logs) or `sensitive` Terraform values
+  (hidden in plans and PR comments). The landing bucket name carries a hash, not the account ID.
 
 ## Known limitations (deliberate, and what I would do next)
 
@@ -174,6 +194,8 @@ stacks/governance/  ACCOUNTADMIN-only controls, applied manually
 envs/{dev,qa,prod}/ thin roots: backend + terraform.tfvars
 envs/governance/    root for the governance stack
 .github/workflows/  reusable validate / plan / apply, plus pr, deploy, promote, drift callers
+.github/CODEOWNERS  review requested on workflows, bootstrap and prod config
+docs/               demo-script.md (10-minute walkthrough), planner-role-findings.md (investigation)
 ```
 
 ## Reproduce it
@@ -192,7 +214,8 @@ envs/governance/    root for the governance stack
    new environment so its warehouses get their monitor.
 6. **Deploy:** push to `main`. Everything after that is the pipeline.
 
-See [`docs/demo-script.md`](docs/demo-script.md) for a five-minute walkthrough.
+See [`docs/demo-script.md`](docs/demo-script.md) for a ten-minute walkthrough built around a live change
+(a new schema and table deployed through the pipeline).
 
 ## How this maps to running a data platform
 

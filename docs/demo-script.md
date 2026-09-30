@@ -49,7 +49,8 @@ environment: the same commit runs everywhere.
 
 3. Show the environments page: `qa` and `prod` require a reviewer, all three only accept `main`.
    Explain that qa and prod would have paused here had this change touched them.
-4. Show the Snowflake side: `SHOW USERS LIKE 'SVC_TF_%';` lists the workload-identity service users.
+4. Show the Snowflake side: `SHOW USERS LIKE 'SVC_TF_%';` lists the service users. Five authenticate with
+   GitHub OIDC (no key, no password); `SVC_TF_LOCAL` is the one key-pair user, used from a laptop.
 
 ## 7:00 to 8:30 . Proof in Snowflake
 
