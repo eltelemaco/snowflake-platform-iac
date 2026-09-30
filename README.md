@@ -20,6 +20,7 @@ history and pull requests.
 | Drift detection | Nightly plan per env, opens or closes a GitHub issue, never auto-fixes | `.github/workflows/drift.yml` |
 | Cost governance | Monthly resource monitors, small warehouses, statement timeouts | `stacks/governance`, `modules/warehouse` |
 | Validation | `fmt`, `validate`, `tflint`, `trivy` as required checks | `.github/workflows/terraform-validate.yml` |
+| AWS to Snowflake data access | S3 landing bucket, storage integration and external stage per environment, read-only, prefix-isolated | `modules/s3_integration`, `bootstrap/aws/landing.tf` |
 
 ## Architecture
 
@@ -97,6 +98,16 @@ could not on a trial, and I would not hide that.
 hold only a backend and that environment's `terraform.tfvars`, so promotion is a config diff, not
 a code copy.
 
+**S3 access without giving the pipeline IAM.** Each environment gets a Snowflake storage integration
+and an external stage (`<ENV>_RAW.LANDING.S3_LANDING`) reading only `s3://<landing bucket>/<env>/`.
+The bucket and the read-only IAM roles live in `bootstrap/aws`, so the pipeline that deploys Snowflake
+never holds `iam:*`. Snowflake only reveals its IAM user and external ID after the integration exists,
+so the trust is a two-phase handshake: the roles start trusting the AWS account, the pipeline creates
+the integrations, then the trust is tightened to Snowflake's IAM user plus that integration's external
+ID. Isolation is enforced twice: by the integration's allowed locations and by the IAM policy. I
+tested it: reading `dev/` works, and pointing the `dev` integration at `prod/` is refused. The
+account ID and role ARN are `sensitive` Terraform values so they do not appear in public plans.
+
 ## Security posture
 
 - No long-lived credentials in GitHub, AWS or Snowflake CI paths.
@@ -122,14 +133,17 @@ a code copy.
 6. **Drift on `snowflake_execute` resources (monitor attachment) is not detected.** The nightly
    plan covers everything else.
 7. **Single account.** See above.
+8. **The S3 trust handoff is manual.** After a new environment's integration exists, its IAM user and
+   external ID are fed to `bootstrap/aws` (`snowflake_storage_iam`). It is a one-time step per
+   environment. The landing roles are read-only, so unloading data to S3 is not covered.
 
 ## Repository layout
 
 ```
 bootstrap/          one-time setup, run by a human
   snowflake_bootstrap.sql   TF_DEPLOYER role, OIDC service users (ACCOUNTADMIN, run once)
-  aws/                      OIDC provider, state bucket, scoped IAM roles (local state)
-modules/            leaf modules: database, warehouse, rbac, network_policy, resource_monitor
+  aws/                      OIDC provider, state bucket, S3 landing bucket, scoped IAM roles (local state)
+modules/            leaf modules: database, warehouse, rbac, network_policy, resource_monitor, s3_integration
 stacks/platform/    the main module, composed per environment
 stacks/governance/  ACCOUNTADMIN-only controls, applied manually
 envs/{dev,qa,prod}/ thin roots: backend + terraform.tfvars
@@ -145,10 +159,13 @@ envs/governance/    root for the governance stack
    The `allowed_account_ids` guard aborts if the credentials belong to another account.
 3. **GitHub:** create environments `dev`, `qa`, `prod` (required reviewer on `prod`, deploy only from
    `main`). Set repo secrets `SNOWFLAKE_ORGANIZATION_NAME`, `SNOWFLAKE_ACCOUNT_NAME`,
-   `TF_STATE_BUCKET`, `AWS_PLAN_ROLE_ARN`, and per-environment secret `AWS_APPLY_ROLE_ARN`.
-4. **Governance (once, as `ACCOUNTADMIN`):** apply `envs/governance`, then re-apply after each
+   `TF_STATE_BUCKET`, `AWS_PLAN_ROLE_ARN`, `AWS_ACCOUNT_ID`, and per-environment secret `AWS_APPLY_ROLE_ARN`.
+4. **S3 trust (once per environment, after its first deploy):** read each environment's
+   `terraform output -json s3_trust` and pass the three values to `bootstrap/aws` as
+   `snowflake_storage_iam`, then re-apply it. Never commit them.
+5. **Governance (once, as `ACCOUNTADMIN`):** apply `envs/governance`, then re-apply after each
    new environment so its warehouses get their monitor.
-5. **Deploy:** push to `main`. Everything after that is the pipeline.
+6. **Deploy:** push to `main`. Everything after that is the pipeline.
 
 See [`docs/demo-script.md`](docs/demo-script.md) for a five-minute walkthrough.
 
@@ -162,4 +179,4 @@ See [`docs/demo-script.md`](docs/demo-script.md) for a five-minute walkthrough.
 | Security posture | keyless auth, least-privilege roles, scoped state access, documented gaps |
 | Cost governance | monitors, X-Small warehouses, 60s auto-suspend, statement timeouts |
 | Operating it | drift issues, saved-plan applies, break-glass governance stack |
-| Cross-platform (AWS + Snowflake) | S3 state and OIDC roles on the AWS side, WIF on the Snowflake side |
+| Cross-platform (AWS + Snowflake) | S3 state, OIDC roles and a storage integration on AWS, WIF on the Snowflake side |

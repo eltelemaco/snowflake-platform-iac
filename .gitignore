@@ -9,3 +9,6 @@ secrets.*
 *.p8
 *.pem
 .env
+
+# Documentation is part of this repo (a global ignore rule may hide docs/).
+!docs/
