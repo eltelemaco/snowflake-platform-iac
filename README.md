@@ -34,7 +34,7 @@ governance stack, which are human-run by design (see below).
 | Keyless CI/CD | GitHub OIDC to AWS and to Snowflake (workload identity federation) | `.github/actions/tf-init`, `bootstrap/` |
 | Promotion with approvals | PR plans for all envs, merge deploys `dev`, then `qa` and `prod` each wait for a human | `.github/workflows/deploy.yml` |
 | Manual promotion | Deploy one commit to one environment (pin `qa`, hotfix `prod`), plan-only by default | `.github/workflows/promote.yml` |
-| Drift detection | Plan per env every 2 hours, opens or closes a GitHub issue, never auto-fixes, skips while a deploy is running | `.github/workflows/drift.yml` |
+| Drift detection | Plan per env every 2 hours, opens or closes a GitHub issue, never auto-fixes, skips while a deploy is running (a deploy parked at an approval gate blocks it for an hour, then it warns and checks anyway) | `.github/workflows/drift.yml` |
 | Cost governance | Monthly resource monitors, small warehouses, statement timeouts | `stacks/governance`, `modules/warehouse` |
 | Validation | `fmt`, `validate`, `tflint`, `trivy` as required checks | `.github/workflows/terraform-validate.yml` |
 | AWS to Snowflake data access | S3 landing bucket, storage integration and external stage per environment, read-only, prefix-isolated | `modules/s3_integration`, `bootstrap/aws/landing.tf` |
