@@ -20,3 +20,9 @@ network_policy_allowed_ips = ["203.0.113.0/24"]
 demo_users = {
   ANALYST = "DEMO_ANALYST"
 }
+
+# Landing zone: bucket and IAM role come from bootstrap/aws.
+s3_integration = {
+  enabled = true
+  bucket  = "snowflake-platform-iac-landing-8e6407430e"
+}

@@ -11,3 +11,7 @@ output "plan_role_arn" {
 output "apply_role_arns" {
   value = { for k, r in aws_iam_role.apply : k => r.arn }
 }
+
+output "landing_bucket" {
+  value = aws_s3_bucket.landing.id
+}

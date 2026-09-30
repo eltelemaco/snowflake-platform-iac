@@ -42,3 +42,24 @@ variable "demo_users" {
   type        = map(string)
   default     = {}
 }
+
+variable "s3_integration" {
+  description = "S3 landing zone. The bucket and IAM role are created by bootstrap/aws."
+  type = object({
+    enabled = optional(bool, false)
+    bucket  = optional(string, "")
+  })
+  default = {}
+}
+
+variable "aws_account_id" {
+  description = "AWS account that owns the landing bucket roles. Sensitive so it stays out of plans and PR comments (this repo is public)."
+  type        = string
+  default     = ""
+  sensitive   = true
+
+  validation {
+    condition     = !var.s3_integration.enabled || (var.aws_account_id != "" && var.s3_integration.bucket != "")
+    error_message = "s3_integration.enabled requires aws_account_id and s3_integration.bucket."
+  }
+}

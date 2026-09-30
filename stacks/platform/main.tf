@@ -67,3 +67,32 @@ resource "snowflake_grant_account_role" "demo_user_role" {
 
   depends_on = [module.rbac]
 }
+
+module "s3_integration" {
+  source = "../../modules/s3_integration"
+  count  = var.s3_integration.enabled ? 1 : 0
+
+  environment = local.env
+  database    = module.database["RAW"].name
+  bucket      = var.s3_integration.bucket
+  prefix      = var.environment
+  role_arn    = "arn:aws:iam::${var.aws_account_id}:role/snowflake-s3-${var.environment}"
+
+  # The RAW_RW future grants must exist before the LANDING schema is created.
+  depends_on = [module.rbac]
+
+}
+
+# Engineers may read from the stage. Read-only by design: the IAM role is read-only too.
+resource "snowflake_grant_privileges_to_account_role" "landing_stage_usage" {
+  count = var.s3_integration.enabled ? 1 : 0
+
+  account_role_name = "${local.prefix}RAW_RW"
+  privileges        = ["USAGE"]
+  on_schema_object {
+    object_type = "STAGE"
+    object_name = module.s3_integration[0].stage_fully_qualified_name
+  }
+
+  depends_on = [module.rbac]
+}
