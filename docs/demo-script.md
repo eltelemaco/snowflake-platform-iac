@@ -2,7 +2,7 @@
 
 One live change, from pull request to Snowflake, with everything that protects it visible on the way.
 The live change is a new schema and table in `dev`, already prepared on branch `demo/sales-orders`
-(PR #9, closed, ready to reopen). Everything here has been run for real. Linked runs are the fallback
+(no PR is open: you create it live, which is the first thing the audience sees). Everything here has been run for real. Linked runs are the fallback
 if something misbehaves live.
 
 Repo: https://github.com/eltelemaco/snowflake-platform-iac
@@ -13,7 +13,9 @@ Repo: https://github.com/eltelemaco/snowflake-platform-iac
 2. Confirm the demo branch is current with `main` (branch protection requires it):
    `git fetch && git log --oneline origin/main..origin/demo/sales-orders` should show one commit, and
    `git log --oneline origin/demo/sales-orders..origin/main` should show none. If `main` moved, run
-   `git checkout demo/sales-orders && git rebase origin/main && git push --force-with-lease`.
+   `git checkout demo/sales-orders && git rebase origin/main`, then check `git rev-list --count origin/main..HEAD`
+   still prints `1` before running `git push --force-with-lease`. A `0` means git dropped the commit because
+   the same change is already on `main`; recreate the branch as described under "After the demo".
 3. Confirm `DEV_RAW.SALES` does not exist yet: `SHOW SCHEMAS LIKE 'SALES' IN DATABASE DEV_RAW;`
 
 ## 0:00 to 1:30 . The idea and the layout
@@ -30,7 +32,8 @@ environment: the same commit runs everywhere.
 
 1. Show the diff on `demo/sales-orders`: about 20 lines in `envs/dev/terraform.tfvars`, declaring a
    `SALES` schema and an `ORDERS` table. No new Terraform code, only configuration.
-2. Reopen the PR: `gh pr reopen 9 --repo eltelemaco/snowflake-platform-iac`
+2. Open the PR from the prepared branch (GitHub cannot reopen an old PR once its branch was force-pushed):
+   `gh pr create --base main --head demo/sales-orders --title "dev: add SALES schema and ORDERS table" --body "Adds a schema and a table to dev only."`
 3. While the checks run (about a minute) say what they are: `validate` (fmt, validate, tflint, trivy)
    and a plan for **all three environments**.
 4. Read the plan comment: **dev adds 2 resources, qa and prod show No changes.** Reviewers see the
@@ -41,7 +44,7 @@ environment: the same commit runs everywhere.
 
 ## 4:00 to 7:00 . Merge, deploy, and why there are no secrets
 
-1. Merge PR #9. Open the `deploy` run: validate, three plans, then `apply-dev`.
+1. Merge the PR. Open the `deploy` run: validate, three plans, then `apply-dev`.
 2. While it runs (about two minutes), open a plan job log and point at `role-to-assume: ***`.
 
 > "There is no stored credential anywhere. GitHub mints a token per job. AWS and Snowflake each trust
@@ -86,6 +89,20 @@ account because a trial cannot have more.
 
 To run it again, remove the change: revert the merge commit through a PR
 (`git revert <sha>` on a branch). The pipeline then destroys the schema and table.
+
+Then rebuild the demo branch. **Do not rebase it**: `main` now contains this change, and `git rebase` silently
+drops any commit whose patch already exists upstream, leaving an empty branch. Re-apply the change by
+reverting the revert instead:
+
+```bash
+git fetch origin && git checkout main && git pull
+REVERT=$(git log --grep="Revert" --format=%h -1)     # the revert commit you just merged
+git checkout -B demo/sales-orders origin/main
+git revert --no-edit $REVERT                          # re-adds the SALES schema and ORDERS table
+git push --force-with-lease origin demo/sales-orders
+```
+
+A closed PR cannot be reopened after that force-push, so create a new one for the next run.
 
 ## Extras if asked (not in the ten minutes)
 
