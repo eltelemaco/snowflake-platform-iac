@@ -29,6 +29,8 @@ module "platform" {
   demo_users                 = var.demo_users
   s3_integration             = var.s3_integration
   aws_account_id             = var.aws_account_id
+  schemas                    = var.schemas
+  tables                     = var.tables
 }
 
 output "s3_trust" {

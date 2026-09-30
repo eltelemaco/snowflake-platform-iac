@@ -63,3 +63,28 @@ variable "aws_account_id" {
     error_message = "s3_integration.enabled requires aws_account_id and s3_integration.bucket."
   }
 }
+
+variable "schemas" {
+  description = "Schemas to create, keyed by schema name. `database` is a logical key of var.databases (e.g. RAW)."
+  type = map(object({
+    database = string
+    comment  = optional(string)
+  }))
+  default = {}
+}
+
+variable "tables" {
+  description = "Tables to create, keyed by table name. `database` and `schema` are keys of var.databases and var.schemas."
+  type = map(object({
+    database = string
+    schema   = string
+    comment  = optional(string)
+    columns = list(object({
+      name     = string
+      type     = string
+      nullable = optional(bool, true)
+      comment  = optional(string)
+    }))
+  }))
+  default = {}
+}

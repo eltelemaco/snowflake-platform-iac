@@ -80,6 +80,10 @@ approval. Apply is the only thing that needs a human.
 a recreated repo of the same name. My first trust policies used the old name-only form and AWS
 rejected the token. Check yours with `gh api repos/<repo>/actions/oidc/customization/sub`.
 
+**New objects are a config change.** Schemas and tables are declared in an environment's
+`terraform.tfvars` (`schemas`, `tables`). Database-level future grants mean a new schema or table is
+usable by the right roles the moment it exists, with no per-object grants to write.
+
 **One trunk, not a branch per environment.** The same commit is deployed to every environment and only
 `envs/<env>/terraform.tfvars` differs, so what was tested in `dev` is byte-for-byte what reaches `prod`.
 Branch-per-environment drifts (hotfixes that never merge back) and turns promotion into a code merge.
@@ -160,7 +164,7 @@ account ID and role ARN are `sensitive` Terraform values so they do not appear i
 bootstrap/          one-time setup, run by a human
   snowflake_bootstrap.sql   TF_DEPLOYER role, OIDC service users (ACCOUNTADMIN, run once)
   aws/                      OIDC provider, state bucket, S3 landing bucket, scoped IAM roles (local state)
-modules/            leaf modules: database, warehouse, rbac, network_policy, resource_monitor, s3_integration
+modules/            leaf modules: database, schema, table, warehouse, rbac, network_policy, resource_monitor, s3_integration
 stacks/platform/    the main module, composed per environment
 stacks/governance/  ACCOUNTADMIN-only controls, applied manually
 envs/{dev,qa,prod}/ thin roots: backend + terraform.tfvars
