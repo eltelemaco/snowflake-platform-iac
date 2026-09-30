@@ -1,9 +1,12 @@
 # Ten-minute walkthrough
 
-One live change, from pull request to Snowflake, with everything that protects it visible on the way.
-The live change is a new schema and table in `dev`, already prepared on branch `demo/sales-orders`
-(no PR is open: you create it live, which is the first thing the audience sees). Everything here has been run for real. Linked runs are the fallback
-if something misbehaves live.
+One live change, from pull request to Snowflake, through **all three environments**, with everything that
+protects it visible on the way. The change is prepared on branch `demo/sales-orders`:
+- `dev`: a `SALES` schema and an `ORDERS` table
+- `qa` and `prod`: the same `SALES` schema
+
+No PR is open. You create it live, which is the first thing the audience sees. Everything here has been run
+for real. Linked runs are the fallback if something misbehaves live.
 
 Repo: https://github.com/eltelemaco/snowflake-platform-iac
 
@@ -16,7 +19,9 @@ Repo: https://github.com/eltelemaco/snowflake-platform-iac
    `git checkout demo/sales-orders && git rebase origin/main`, then check `git rev-list --count origin/main..HEAD`
    still prints `1` before running `git push --force-with-lease`. A `0` means git dropped the commit because
    the same change is already on `main`; recreate the branch as described under "After the demo".
-3. Confirm `DEV_RAW.SALES` does not exist yet: `SHOW SCHEMAS LIKE 'SALES' IN DATABASE DEV_RAW;`
+3. Confirm the schema does not exist anywhere yet. In Snowsight, each of these returns no rows:
+   `SHOW SCHEMAS LIKE 'SALES' IN DATABASE DEV_RAW;` and the same for `QA_RAW` and `PROD_RAW`.
+4. Stay signed in to GitHub as the reviewer (`eltelemaco`): you will approve `qa` and `prod` live.
 
 ## 0:00 to 1:30 . The idea and the layout
 
@@ -30,65 +35,58 @@ environment: the same commit runs everywhere.
 
 ## 1:30 to 4:00 . The change (live)
 
-1. Show the diff on `demo/sales-orders`: about 20 lines in `envs/dev/terraform.tfvars`, declaring a
-   `SALES` schema and an `ORDERS` table. No new Terraform code, only configuration.
+1. Show the diff on `demo/sales-orders`: three small edits, one per environment. `dev` gets a schema and
+   a table, `qa` and `prod` get the schema. No new Terraform code, only configuration.
 2. Open the PR from the prepared branch (GitHub cannot reopen an old PR once its branch was force-pushed):
-   `gh pr create --base main --head demo/sales-orders --title "dev: add SALES schema and ORDERS table" --body "Adds a schema and a table to dev only."`
+   `gh pr create --base main --head demo/sales-orders --title "Add SALES schema to dev, qa and prod" --body "Adds the SALES schema to every environment, plus the ORDERS table in dev."`
 3. While the checks run (about a minute) say what they are: `validate` (fmt, validate, tflint, trivy)
    and a plan for **all three environments**.
-4. Read the plan comment: **dev adds 2 resources, qa and prod show No changes.** Reviewers see the
-   blast radius before approving.
+4. Read the plan comment: **dev adds 2 resources, qa adds 1, prod adds 1.** Reviewers see the blast
+   radius per environment before approving.
 
 > "Nobody can merge until these four checks pass. The plan a person reads is the plan file that gets
 > applied. If state changed in between, Terraform refuses it."
 
-## 4:00 to 7:00 . Merge, deploy, and why there are no secrets
+## 4:00 to 8:00 . Merge, deploy, and the approval gates
 
-1. Merge the PR. Open the `deploy` run: validate, three plans, then `apply-dev`.
-2. While it runs (about two minutes), open a plan job log and point at `role-to-assume: ***`.
+1. Merge the PR. Open the `deploy` run: validate, three plans, then `apply-dev` runs on its own
+   (under a minute).
+2. `apply-qa` now **waits for a reviewer**. Open the run, click **Review deployments**, tick `qa`, and
+   approve. Say what the reviewer is approving: the plan they already read.
+3. `apply-prod` then waits for its own approval. Approve it the same way.
 
-> "There is no stored credential anywhere. GitHub mints a token per job. AWS and Snowflake each trust
-> only a specific subject, so a job in dev cannot become the prod user."
+> "Dev deploys itself. QA and prod stop and wait for a person. The same commit goes through all
+> three, and a job in dev can never become the prod identity."
 
-3. Show the environments page: `qa` and `prod` require a reviewer, all three only accept `main`.
-   Explain that qa and prod would have paused here had this change touched them.
-4. Show the Snowflake side: `SHOW USERS LIKE 'SVC_TF_%';` lists the service users. Five authenticate with
-   GitHub OIDC (no key, no password); `SVC_TF_LOCAL` is the one key-pair user, used from a laptop.
+4. While a job runs, open a plan job log and point at `role-to-assume: ***`. GitHub mints a token per
+   job and AWS and Snowflake each trust only a specific subject, so nothing is stored anywhere.
+5. Optional: `SHOW USERS LIKE 'SVC_TF_%';` lists the service users. Five authenticate with GitHub OIDC (no
+   key, no password); `SVC_TF_LOCAL` is the one key-pair user, used from a laptop.
 
-## 7:00 to 8:30 . Proof in Snowflake
-
-When `apply-dev` is green, in Snowsight:
+## 8:00 to 9:15 . Proof in Snowflake
 
 ```sql
+SHOW SCHEMAS LIKE 'SALES' IN DATABASE QA_RAW;     -- exists
+SHOW SCHEMAS LIKE 'SALES' IN DATABASE PROD_RAW;   -- exists
 SHOW TABLES IN SCHEMA DEV_RAW.SALES;
-DESC TABLE DEV_RAW.SALES.ORDERS;
 SHOW GRANTS ON TABLE DEV_RAW.SALES.ORDERS;
 ```
 
 The last one is the point: `DEV_RAW_RO` and `DEV_RAW_RW` already hold the right privileges, because
 database-level future grants cover any new object. **No per-object grants were written.**
 
-## 8:30 to 9:30 . One guardrail, pick one
-
-- **Drift (60s):** `ALTER WAREHOUSE DEV_LOAD_WH SET WAREHOUSE_SIZE = SMALL;` then
-  `gh workflow run drift.yml --ref main`. It opens **"Drift detected: dev"** with the diff and never
-  auto-fixes. Fix it afterwards with `gh workflow run deploy.yml --ref main` (issue closes on the
-  next drift run). Fallback: https://github.com/eltelemaco/snowflake-platform-iac/issues/2
-- **Cost (30s):** `SHOW RESOURCE MONITORS;` shows a monthly cap per environment and on the account.
-  Explain why it is a separate `ACCOUNTADMIN` stack, applied by a human: attaching a monitor needs
-  account-wide `MODIFY`, which the pipeline should not hold.
-
-## 9:30 to 10:00 . Honest limits
+## 9:15 to 10:00 . Honest limits
 
 Say two of them from the README's **Known limitations** section, for example: the plan identities
 share the deployer role (I tested a read-only planner: Snowflake cannot let a non-owner describe users,
-network policies or integrations, so the fix is a redesign, documented in `docs/planner-role-findings.md`), and environments are prefixes in one
-account because a trial cannot have more.
+network policies or integrations, so the fix is a redesign, documented in `docs/planner-role-findings.md`),
+and environments are prefixes in one account because a trial cannot have more.
 
 ## After the demo: reset
 
 To run it again, remove the change: revert the merge commit through a PR
-(`git revert <sha>` on a branch). The pipeline then destroys the schema and table.
+(`git revert <sha>` on a branch). The plan shows **dev 2 to destroy, qa 1, prod 1**, and the deploy needs
+your approval for `qa` and `prod` again.
 
 Then rebuild the demo branch. **Do not rebase it**: `main` now contains this change, and `git rebase` silently
 drops any commit whose patch already exists upstream, leaving an empty branch. Re-apply the change by
@@ -98,13 +96,21 @@ reverting the revert instead:
 git fetch origin && git checkout main && git pull
 REVERT=$(git log --grep="Revert" --format=%h -1)     # the revert commit you just merged
 git checkout -B demo/sales-orders origin/main
-git revert --no-edit $REVERT                          # re-adds the SALES schema and ORDERS table
+git revert --no-edit $REVERT                          # re-adds the change in all three environments
 git push --force-with-lease origin demo/sales-orders
 ```
 
 A closed PR cannot be reopened after that force-push, so create a new one for the next run.
 
 ## Extras if asked (not in the ten minutes)
+
+- **Drift (60s):** `ALTER WAREHOUSE DEV_LOAD_WH SET WAREHOUSE_SIZE = SMALL;` then
+  `gh workflow run drift.yml --ref main`. It opens **"Drift detected: dev"** with the diff and never
+  auto-fixes. Fix it afterwards with `gh workflow run deploy.yml --ref main` (the issue closes on the
+  next drift run). Fallback: https://github.com/eltelemaco/snowflake-platform-iac/issues/2
+- **Cost (30s):** `SHOW RESOURCE MONITORS;` shows a monthly cap per environment and on the account. It is a
+  separate `ACCOUNTADMIN` stack applied by a human: attaching a monitor needs account-wide `MODIFY`,
+  which the pipeline should not hold.
 
 - **Manual promotion:** `gh workflow run promote.yml -f environment=qa -f ref=<sha>` is plan-only by
   default. It only accepts commits on `main`. Promoting an old commit shows what a rollback would
