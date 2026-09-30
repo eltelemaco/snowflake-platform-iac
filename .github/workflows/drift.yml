@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   guard:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       busy: ${{ steps.check.outputs.busy }}
     steps:
@@ -67,7 +67,7 @@ jobs:
   report:
     needs: [guard, plan-dev, plan-qa, plan-prod]
     if: ${{ !cancelled() && needs.guard.outputs.busy == 'false' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v8
         with:
